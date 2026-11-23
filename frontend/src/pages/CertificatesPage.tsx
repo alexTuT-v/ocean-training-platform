@@ -4,6 +4,7 @@ import { getJson } from '../api/client'
 import type { CertificateListResponse } from '../api/types'
 import { useActor } from '../actor/ActorProvider'
 import { CertificateDrawer } from './CertificateDrawer'
+import { exportCertificates } from '../features/certificates/exportCsv'
 
 const sortOptions = ['issued_local_date', 'learner_name', 'course_title', 'serial_number'] as const
 type Sort = typeof sortOptions[number]
@@ -16,6 +17,8 @@ export function CertificatesPage() {
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [revision, setRevision] = useState(0)
+  const [exportBusy, setExportBusy] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
   const search = params.get('search') ?? ''
   const candidate = params.get('sort')
   const sort: Sort = sortOptions.includes(candidate as Sort) ? candidate as Sort : 'issued_local_date'
@@ -41,8 +44,18 @@ export function CertificatesPage() {
     if (resetPage) next.set('page', '1')
     setParams(next)
   }
+  async function exportCurrent() {
+    if (!tenant || exportBusy) return
+    const capturedActor = actorEmail
+    const capturedTenant = tenant.name
+    setExportBusy(true); setExportError(null)
+    try { await exportCertificates(capturedActor, { search, sort, direction }, capturedTenant) }
+    catch (cause) { setExportError(cause instanceof Error ? cause.message : '导出失败') }
+    finally { setExportBusy(false) }
+  }
   return <section>
-    <div className="page-heading"><div><h1>证书</h1><p>{tenant?.name} · {tenant?.timezone}</p></div><button type="button" disabled>导出 CSV</button></div>
+    <div className="page-heading"><div><h1>证书</h1><p>{tenant?.name} · {tenant?.timezone}</p></div><button type="button" disabled={!tenant || exportBusy} onClick={exportCurrent}>{exportBusy ? `正在导出 ${tenant?.name}…` : '导出 CSV'}</button></div>
+    {exportError && <p role="alert">{exportError} <button type="button" onClick={exportCurrent}>重试导出</button></p>}
     <div className="filters"><label>搜索学员或序列号<input type="search" value={search} onChange={event => updateParam('search', event.target.value, true)} /></label>
       <label>排序字段<select value={sort} onChange={event => updateParam('sort', event.target.value, true)}>{sortOptions.map(value => <option key={value} value={value}>{({ issued_local_date: '签发日期', learner_name: '学员', course_title: '课程', serial_number: '序列号' })[value]}</option>)}</select></label>
       <button type="button" onClick={() => updateParam('direction', direction === 'asc' ? 'desc' : 'asc', true)} aria-label="切换排序方向">{direction === 'asc' ? '升序 ↑' : '降序 ↓'}</button></div>

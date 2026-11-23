@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getJson } from '../api/client'
 import type { BulkIssueResponse, Course, CoursesResponse, EnrollmentsResponse } from '../api/types'
 import { useActor } from '../actor/ActorProvider'
@@ -22,6 +22,17 @@ export function CoursesPage() {
   const [write, setWrite] = useState<PendingWrite | null>(null)
   const [writeError, setWriteError] = useState<string | null>(null)
   const [result, setResult] = useState<BulkIssueResponse | null>(null)
+  const issueButtonRef = useRef<HTMLButtonElement>(null)
+  const confirmButtonRef = useRef<HTMLButtonElement>(null)
+
+  function closeConfirm() { setConfirmOpen(false); issueButtonRef.current?.focus() }
+  useEffect(() => {
+    if (!confirmOpen) return
+    confirmButtonRef.current?.focus()
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape' && !busy) closeConfirm() }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [confirmOpen, busy])
 
   useEffect(() => {
     if (!tenant) { setCourses([]); setSelectedId(null); return }
@@ -59,7 +70,7 @@ export function CoursesPage() {
     setWrite(operation); setBusy(true); setWriteInFlight(true); setWriteError(null)
     try {
       const response = await submitWrite<BulkIssueResponse>(operation)
-      setResult(response); setConfirmOpen(false); setWrite(null)
+      setResult(response); closeConfirm(); setWrite(null)
       setEnrollmentsRevision(value => value + 1)
     } catch (cause) {
       setWriteError(cause instanceof Error ? cause.message : '请求结果不确定，请用原操作重试')
@@ -75,10 +86,10 @@ export function CoursesPage() {
       {enrollmentsLoading ? <p role="status">正在加载学员…</p> : enrollmentsError ? <div role="alert">{enrollmentsError} <button onClick={() => setEnrollmentsRevision(value => value + 1)}>重试学员</button></div> : enrollments && <>
         <div className="course-summary"><span>已完成 {completed}</span><span>未完成 {rows.length - completed}</span><span>已有有效证书 {certified}</span></div>
         {rows.length === 0 ? <p className="empty-state">该课程暂无学员</p> : <div className="table-scroll"><table><thead><tr><th>学员</th><th>完成状态</th><th>颁发资格</th></tr></thead><tbody>{rows.map(row => <tr key={row.learner_id}><td>{row.learner_name}</td><td>{row.status === 'COMPLETED' ? '已完成' : '未完成'}</td><td>{row.status === 'INCOMPLETE' ? '不可颁发' : row.active_certificate_id !== null ? '已有有效证书' : '可颁发'}</td></tr>)}</tbody></table></div>}
-        <p className="muted">仅为已完成且当前无有效证书的学员颁发。</p><button className="primary-button" type="button" disabled={busy} onClick={() => setConfirmOpen(true)}>批量颁发</button>
+        <p className="muted">仅为已完成且当前无有效证书的学员颁发。</p><button ref={issueButtonRef} className="primary-button" type="button" disabled={busy} onClick={() => setConfirmOpen(true)}>批量颁发</button>
       </>}
       {confirmOpen && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true" aria-label="批量颁发确认"><h2>批量颁发</h2><p>将为 {courses.find(course => course.id === selectedId)?.title} 中所有符合条件的学员颁发证书。</p>
-        {writeError && <p role="alert">{writeError}</p>}<div className="modal-actions"><button type="button" disabled={busy} onClick={() => setConfirmOpen(false)}>取消</button><button type="button" disabled={busy} onClick={issue}>{busy ? '处理中…' : writeError ? '用同一操作重试' : '确认批量颁发'}</button></div>
+        {writeError && <p role="alert">{writeError}</p>}<div className="modal-actions"><button type="button" disabled={busy} onClick={closeConfirm}>取消</button><button ref={confirmButtonRef} type="button" disabled={busy} onClick={issue}>{busy ? '处理中…' : writeError ? '用同一操作重试' : '确认批量颁发'}</button></div>
       </div></div>}
       {result && <BulkIssueResults result={result} />}
     </>}

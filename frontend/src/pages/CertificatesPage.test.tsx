@@ -46,3 +46,35 @@ it('shows empty and error states with a retry action', async () => {
   fireEvent.click(screen.getByRole('button', { name: '重试列表' }))
   expect(await screen.findByText('暂无证书')).toBeTruthy()
 })
+
+it('exports the filters visible in the certificate page without pagination', async () => {
+  const requests: Array<{ path: string; email: string | null }> = []
+  vi.stubGlobal('fetch', vi.fn(async (path: string, options: RequestInit) => {
+    requests.push({ path, email: new Headers(options.headers).get('X-Actor-Email') })
+    if (path === '/api/me') return json(me)
+    if (path.startsWith('/api/certificates/export?')) return new Response('learner,course\n', { status: 200 })
+    return json({ items: [item], page: 3, page_size: 20, total: 55 })
+  }))
+  Object.defineProperty(URL, 'createObjectURL', { value: vi.fn(() => 'blob:test'), configurable: true })
+  Object.defineProperty(URL, 'revokeObjectURL', { value: vi.fn(), configurable: true })
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  render(<MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }} initialEntries={['/certificates?search=Alex&sort=learner_name&direction=asc&page=3']}><ActorProvider><CertificatesPage /></ActorProvider></MemoryRouter>)
+  expect(await screen.findByText('CERT-E-011')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '导出 CSV' }))
+  await waitFor(() => expect(requests.some(request => request.path === '/api/certificates/export?search=Alex&sort=learner_name&direction=asc' && request.email === 'alice@east.test')).toBe(true))
+})
+
+it('returns focus to the revoke button after closing its confirmation', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (path: string) => {
+    if (path === '/api/me') return json(me)
+    if (path === '/api/certificates/11') return json(detail)
+    return json({ items: [item], page: 1, page_size: 20, total: 1 })
+  }))
+  render(<MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><ActorProvider><CertificatesPage /></ActorProvider></MemoryRouter>)
+  fireEvent.click(await screen.findByRole('button', { name: 'CERT-E-011' }))
+  const revoke = await screen.findByRole('button', { name: '撤销证书' })
+  fireEvent.click(revoke)
+  fireEvent.keyDown(document, { key: 'Escape' })
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(document.activeElement).toBe(revoke)
+})

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { RevokeResponse } from '../api/types'
 import { createPendingWrite, loadPendingWrite, type PendingWrite } from '../lib/pendingWrite'
 import { submitWrite } from '../lib/writeRequest'
@@ -13,6 +13,13 @@ export function RevokeDialog({ id, serial, actorEmail, onDone, onClose, onBusyCh
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<RevokeResponse | null>(null)
+  const confirmRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => { confirmRef.current?.focus() }, [])
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape' && !busy) onClose() }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [busy, onClose])
 
   async function confirm() {
     const operation = write ?? createPendingWrite(actorEmail, path, {})
@@ -30,6 +37,6 @@ export function RevokeDialog({ id, serial, actorEmail, onDone, onClose, onBusyCh
     <h2>撤销证书</h2><p>请确认撤销以下证书：</p><strong>{serial}</strong>
     {result ? <p role="status">{result.changed ? '撤销成功' : '证书已撤销，无需重复操作'}</p> : <p>撤销后可再次颁发新证书，旧证书仍保留。</p>}
     {error && <p role="alert">{error}</p>}
-    <div className="modal-actions"><button type="button" onClick={onClose} disabled={busy}>{result ? '关闭' : '取消'}</button>{!result && <button type="button" onClick={confirm} disabled={busy}>{busy ? '处理中…' : error ? '用同一操作重试' : '确认撤销'}</button>}</div>
+    <div className="modal-actions"><button type="button" onClick={onClose} disabled={busy}>{result ? '关闭' : '取消'}</button>{!result && <button ref={confirmRef} type="button" onClick={confirm} disabled={busy}>{busy ? '处理中…' : error ? '用同一操作重试' : '确认撤销'}</button>}</div>
   </div></div>
 }

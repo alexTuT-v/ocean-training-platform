@@ -70,3 +70,19 @@ it('shows a recoverable course load error', async () => {
   fireEvent.click(screen.getByRole('button', { name: '重试课程' }))
   await waitFor(() => expect(screen.getByText('暂无课程')).toBeTruthy())
 })
+
+it('focuses bulk confirmation and returns focus when Escape closes it', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (path: string) => {
+    if (path === '/api/me') return json(me)
+    if (path === '/api/courses') return json(courses)
+    return json(enrollments)
+  }))
+  render(<ActorProvider><CoursesPage /></ActorProvider>)
+  expect(await screen.findByText('Alex Lee')).toBeTruthy()
+  const trigger = screen.getByRole('button', { name: '批量颁发' })
+  fireEvent.click(trigger)
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: '确认批量颁发' }))
+  fireEvent.keyDown(document, { key: 'Escape' })
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(document.activeElement).toBe(trigger)
+})

@@ -18,3 +18,11 @@ it('requires confirmation and labels an already revoked result without claiming 
   expect(screen.queryByText('撤销成功')).toBeNull()
   expect(paths).toEqual(['/api/certificates/11/revoke'])
 })
+
+it('focuses the confirmation action and closes with Escape', () => {
+  const onClose = vi.fn()
+  render(<RevokeDialog id={11} serial="CERT-E-011" actorEmail="alice@east.test" onDone={() => {}} onClose={onClose} />)
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: '确认撤销' }))
+  fireEvent.keyDown(document, { key: 'Escape' })
+  expect(onClose).toHaveBeenCalledOnce()
+})
