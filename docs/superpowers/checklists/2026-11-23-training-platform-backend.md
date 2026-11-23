@@ -61,7 +61,7 @@
 - 审查修复的 RED→GREEN：`test_unicode_casefold_search_matches_list_and_csv_without_wildcards` 从搜索结果 0 条失败到通过；前端 `retains the key when HTTP succeeds but the response body cannot be read`、课程与撤销的冲突放弃测试先失败后通过。响应体有效 JSON 但缺失写结果字段也有保留键测试。A6 属于测试覆盖缺口，增强测试直接通过现有运行时代码。
 - 2026-11-23 自动验证：`.venv/bin/python -m compileall -q backend` 成功；最终 `.venv/bin/python -m pytest backend/tests -q -p no:cacheprovider` 为 `33 passed in 2.99s`；最终 `npm --prefix frontend test` 为 `25 passed`；`npm --prefix frontend run typecheck` 与 `npm --prefix frontend run build` 均成功。专项测试覆盖 A1–A7、读写契约、数据库约束、重试与跨租户边界。
 - Chrome 真实页面验收：Alice/East 与 Bob/West 切换后列表、详情和课程显示各自数据；Alice 经确认弹窗批量颁发后，结果逐学员显示 `issued/skipped` 与原因，证书列表新增记录；经确认撤销后，列表与详情均显示已撤销。搜索 `Casey`、排序 `serial_number` 后下载 `certificates-East.csv`，浏览器显示 179 B、完成；服务日志对应 `GET /api/certificates/export?search=Casey&sort=serial_number&direction=desc`，不含分页。浏览器没有模拟响应丢失、单行失败或在 100,000 行导出未完成时继续操作列表，也没有验证导出途中切换管理员，故页面三项整体仍未勾选；这些边界由前端组件测试和后端并发测试分别覆盖。
-- README 的命令和说明已人工核对，干净检出的 `./run.sh`、性能脚本与自动测试已实跑；A1–A7 的每条手工 `curl` 尚未逐条在该检出重演，因此 README 项保持未勾选。`ai/session-index.csv` 等 AI 会话材料不存在，Section 6 个人答案未核验；二者需提交者本人处理。最终 commit SHA 应在提交后记录，因此最后一项保持未勾选。
+- README 的命令和说明已人工核对，干净检出的 `./run.sh`、性能脚本与自动测试已实跑；A1–A7 的每条手工 `curl` 尚未逐条在该检出重演，因此 README 项保持未勾选。该次验收时 `ai/session-index.csv` 等 AI 会话材料尚不存在；后续已生成 `ai/` 导出、索引及决策日志，但完整性仍需提交者本人复核。Section 6 个人答案未核验，需提交者本人处理。最终 commit SHA 应在提交后记录，因此最后一项保持未勾选。
 
 ## 7. 课程完成分页补充验收（2026-11-23）
 
