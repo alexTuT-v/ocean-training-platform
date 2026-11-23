@@ -5,6 +5,7 @@ import sqlite3
 from urllib.parse import quote
 
 from .certificate_repo import FROM_CERTIFICATES, certificate_order, certificate_where
+from .db import register_unicode_search
 
 
 CSV_HEADER = ("learner_name", "course_title", "serial_number", "issued_local_date")
@@ -18,6 +19,7 @@ def stream_certificates(path: Path, tenant_id: int, search: str, sort: str, dire
     uri = f"file:{quote(str(path.resolve()), safe='/')}?mode=ro"
     conn = sqlite3.connect(uri, uri=True, timeout=30, check_same_thread=False)
     try:
+        register_unicode_search(conn)
         conn.execute("PRAGMA busy_timeout=30000")
         conn.execute("PRAGMA query_only=ON")
         conn.execute("BEGIN")

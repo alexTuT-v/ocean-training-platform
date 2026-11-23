@@ -98,4 +98,6 @@ curl -sS -X POST -H 'X-Actor-Email: alice@east.test' -H 'Idempotency-Key: a7-new
 
 The identity header is an assessment demo, not a security boundary against an untrusted client. CSV is streamed by the server; the browser frontend currently holds the downloaded Blob in memory. The 100,000-row performance check is measured by the automated test on the host where it runs, and should be rerun on the reviewer's machine.
 
+Known edge cases after the final review: a bookmarked certificate page beyond the last page can display an empty state without pagination; an extremely large page number can make SQLite reject the offset and return 500; and a JSON string containing an escaped unpaired surrogate can fail idempotency fingerprint encoding with 500. These are deferred low-impact inputs. Browser drills for a response lost after commit and for switching actors during a still-running export have not been performed manually; automated tests cover their retry and tenant-scoping logic.
+
 Assessment submission materials such as complete AI session exports, the session index, decision log and personal written answers are separate from this product code. Their completeness is tracked in `docs/superpowers/checklists/2026-11-23-training-platform-backend.md`; do not mark them complete without the actual artifacts.

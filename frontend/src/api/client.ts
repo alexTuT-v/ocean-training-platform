@@ -4,11 +4,15 @@ export class ApiError extends Error {
 
 async function parseJson<T>(response: Response): Promise<T> {
   let body: unknown
-  try { body = await response.json() } catch { body = null }
+  try { body = await response.json() } catch {
+    if (response.ok) throw new Error('响应内容无法读取，请用原操作重试')
+    body = null
+  }
   if (!response.ok) {
     const message = typeof body === 'object' && body !== null && 'message' in body && typeof body.message === 'string' ? body.message : `请求失败（${response.status}）`
     throw new ApiError(response.status, message)
   }
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) throw new Error('响应内容无效，请用原操作重试')
   return body as T
 }
 

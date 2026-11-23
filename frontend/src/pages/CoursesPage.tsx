@@ -3,7 +3,9 @@ import { getJson } from '../api/client'
 import type { BulkIssueResponse, Course, CoursesResponse, EnrollmentsResponse } from '../api/types'
 import { useActor } from '../actor/ActorProvider'
 import { createPendingWrite, loadPendingWrite, type PendingWrite } from '../lib/pendingWrite'
+import { clearPendingWrite } from '../lib/pendingWrite'
 import { submitWrite } from '../lib/writeRequest'
+import { ApiError } from '../api/client'
 import { BulkIssueResults } from './BulkIssueResults'
 
 export function CoursesPage() {
@@ -21,6 +23,7 @@ export function CoursesPage() {
   const [busy, setBusy] = useState(false)
   const [write, setWrite] = useState<PendingWrite | null>(null)
   const [writeError, setWriteError] = useState<string | null>(null)
+  const [conflict, setConflict] = useState(false)
   const [result, setResult] = useState<BulkIssueResponse | null>(null)
   const issueButtonRef = useRef<HTMLButtonElement>(null)
   const confirmButtonRef = useRef<HTMLButtonElement>(null)
@@ -61,20 +64,27 @@ export function CoursesPage() {
   }, [actorEmail, tenant?.id, selectedId, enrollmentsRevision])
 
   function selectCourse(id: number) {
-    setSelectedId(id); setEnrollments(null); setResult(null); setWrite(null); setWriteError(null); setConfirmOpen(false)
+    setSelectedId(id); setEnrollments(null); setResult(null); setWrite(null); setWriteError(null); setConflict(false); setConfirmOpen(false)
+  }
+  function discardConflict() {
+    if (!conflict || busy) return
+    const stale = write ?? loadPendingWrite(actorEmail, `/api/courses/${selectedId}/bulk-issue`)
+    if (stale) clearPendingWrite(stale)
+    setWrite(null); setWriteError(null); setConflict(false); closeConfirm()
   }
   async function issue() {
     if (selectedId === null) return
     const path = `/api/courses/${selectedId}/bulk-issue`
     const operation = write ?? loadPendingWrite(actorEmail, path) ?? createPendingWrite(actorEmail, path, {})
     if (!beginWrite(operation.key)) { setWriteError('该操作正在处理中'); return }
-    setWrite(operation); setBusy(true); setWriteError(null)
+    setWrite(operation); setBusy(true); setWriteError(null); setConflict(false)
     try {
       const response = await submitWrite<BulkIssueResponse>(operation)
       setResult(response); closeConfirm(); setWrite(null)
       setEnrollmentsRevision(value => value + 1)
     } catch (cause) {
       setWriteError(cause instanceof Error ? cause.message : '请求结果不确定，请用原操作重试')
+      setConflict(cause instanceof ApiError && cause.status === 409)
     } finally { setBusy(false); endWrite(operation.key) }
   }
   const rows = enrollments?.items ?? []
@@ -91,7 +101,7 @@ export function CoursesPage() {
         <p className="muted">仅为已完成且当前无有效证书的学员颁发。</p><button ref={issueButtonRef} className="primary-button" type="button" disabled={busy || writeInFlight} onClick={() => { setWrite(savedPending); setConfirmOpen(true) }}>{savedPending ? '继续未决批量颁发操作' : '批量颁发'}</button>
       </>}
       {confirmOpen && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true" aria-label="批量颁发确认"><h2>批量颁发</h2><p>将为 {courses.find(course => course.id === selectedId)?.title} 中所有符合条件的学员颁发证书。</p>
-        {writeError && <p role="alert">{writeError}</p>}<div className="modal-actions"><button type="button" disabled={busy} onClick={closeConfirm}>取消</button><button ref={confirmButtonRef} type="button" disabled={busy} onClick={issue}>{busy ? '处理中…' : writeError || savedPending ? '用同一操作重试' : '确认批量颁发'}</button></div>
+        {writeError && <p role="alert">{writeError}</p>}<div className="modal-actions"><button type="button" disabled={busy} onClick={closeConfirm}>取消</button>{conflict && <button type="button" disabled={busy} onClick={discardConflict}>放弃冲突操作</button>}<button ref={confirmButtonRef} type="button" disabled={busy} onClick={issue}>{busy ? '处理中…' : writeError || savedPending ? '用同一操作重试' : '确认批量颁发'}</button></div>
       </div></div>}
       {result && <BulkIssueResults result={result} />}
     </>}

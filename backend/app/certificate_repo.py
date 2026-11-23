@@ -21,12 +21,11 @@ SUMMARY_COLUMNS = (
 def certificate_where(tenant_id: int, search: str) -> tuple[str, tuple]:
     if not search:
         return "WHERE certificates.tenant_id = ?", (tenant_id,)
-    escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    term = f"%{escaped}%"
+    term = search.casefold()
     return (
         "WHERE certificates.tenant_id = ? AND "
-        "(learners.name LIKE ? ESCAPE '\\' COLLATE NOCASE OR "
-        "certificates.serial_number LIKE ? ESCAPE '\\' COLLATE NOCASE)",
+        "(instr(CASEFOLD(learners.name), ?) > 0 OR "
+        "instr(CASEFOLD(certificates.serial_number), ?) > 0)",
         (tenant_id, term, term),
     )
 

@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ActorProvider } from '../actor/ActorProvider'
 import { CoursesPage } from './CoursesPage'
-import { createPendingWrite, savePendingWrite } from '../lib/pendingWrite'
+import { createPendingWrite, loadPendingWrite, savePendingWrite } from '../lib/pendingWrite'
 
 afterEach(() => { cleanup(); sessionStorage.clear(); vi.unstubAllGlobals() })
 const me = { admin: { id: 1, email: 'alice@east.test' }, tenant: { id: 1, name: 'East', timezone: 'Australia/Sydney' } }
@@ -104,4 +104,33 @@ it('offers an explicit retry for a saved bulk issue after page refresh', async (
   fireEvent.click(retry)
   fireEvent.click(screen.getByRole('button', { name: '用同一操作重试' }))
   await waitFor(() => expect(keys).toEqual([pending.key]))
+})
+
+it('lets an administrator discard a confirmed key conflict and begin a fresh bulk issue', async () => {
+  const other = createPendingWrite('bob@west.test', '/api/courses/2/bulk-issue', {})
+  savePendingWrite(other)
+  const keys: string[] = []
+  vi.stubGlobal('fetch', vi.fn(async (path: string, options: RequestInit) => {
+    if (path === '/api/me') return json(me)
+    if (path === '/api/courses') return json(courses)
+    if (path === '/api/courses/1/enrollments') return json(enrollments)
+    if (path.endsWith('/bulk-issue')) {
+      keys.push(new Headers(options.headers).get('Idempotency-Key') ?? '')
+      if (keys.length === 1) return new Response(JSON.stringify({ code: 'IDEMPOTENCY_CONFLICT', message: 'key conflict' }), { status: 409 })
+      return json({ operation_id: 5, status: 'COMPLETED', summary: { issued: 0, skipped: 0, failed: 0 }, outcomes: [] })
+    }
+    throw new Error(path)
+  }))
+  render(<ActorProvider><CoursesPage /></ActorProvider>)
+  fireEvent.click(await screen.findByRole('button', { name: '批量颁发' }))
+  fireEvent.click(screen.getByRole('button', { name: '确认批量颁发' }))
+  expect(await screen.findByText('key conflict')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '放弃冲突操作' }))
+  expect(loadPendingWrite('alice@east.test', '/api/courses/1/bulk-issue')).toBeNull()
+  expect(loadPendingWrite('bob@west.test', '/api/courses/2/bulk-issue')?.key).toBe(other.key)
+  fireEvent.click(screen.getByRole('button', { name: '批量颁发' }))
+  fireEvent.click(screen.getByRole('button', { name: '确认批量颁发' }))
+  expect(await screen.findByText('操作已完成')).toBeTruthy()
+  expect(keys).toHaveLength(2)
+  expect(keys[1]).not.toBe(keys[0])
 })
