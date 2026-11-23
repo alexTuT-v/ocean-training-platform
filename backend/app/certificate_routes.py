@@ -4,6 +4,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Header, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
+from fastapi.responses import StreamingResponse
 
 from .actor import ActorContext, get_actor, get_connection
 from .certificate_service import certificate_detail, certificates_for_actor
@@ -11,6 +12,7 @@ from .contracts import CertificateDetail, CertificateListResponse, RevokeRespons
 from .errors import ApiError
 from .idempotency import parse_write_body, validate_key
 from .write_service import revoke_certificate
+from .export import stream_certificates
 
 
 router = APIRouter(prefix="/api/certificates")
@@ -32,6 +34,22 @@ def certificates(
     if set(request.query_params) - {"search", "sort", "direction", "page", "page_size"}:
         raise ApiError(422, "INVALID_REQUEST", "不支持的查询参数")
     return certificates_for_actor(conn, actor, search, sort, direction, page, page_size)
+
+
+@router.get("/export")
+def export_certificates(
+    request: Request,
+    search: str = "",
+    sort: Sort = "issued_local_date",
+    direction: Direction = "desc",
+    actor: ActorContext = Depends(get_actor),
+) -> StreamingResponse:
+    if set(request.query_params) - {"search", "sort", "direction"}:
+        raise ApiError(422, "INVALID_REQUEST", "不支持的查询参数")
+    return StreamingResponse(
+        stream_certificates(request.app.state.db_path, actor.tenant_id, search, sort, direction),
+        media_type="text/csv; charset=utf-8",
+    )
 
 
 @router.get("/{certificate_id}", response_model=CertificateDetail)
