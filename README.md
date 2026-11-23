@@ -16,6 +16,8 @@ The UI has two demo actors: Alice (`alice@east.test`, East, `Australia/Sydney`) 
 
 The course enrollment API uses server-side pagination: `GET /api/courses/{id}/enrollments?page=1&page_size=20` (default page size 20, maximum 100). Its response includes the current page of `items`, `page`, `page_size`, `total`, and whole-course `summary` counts for completed, incomplete, and actively certified learners. The course page requests only the visible page; bulk issue still processes the full course.
 
+To revoke an active certificate, use **撤销** in its certificate-list row, or choose **查看并撤销证书** for a learner on the course completion page. Both paths show a confirmation dialog. The revoked certificate remains in the list, and the learner becomes eligible for a new certificate.
+
 ## Verify
 
 ```bash

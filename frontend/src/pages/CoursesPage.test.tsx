@@ -55,6 +55,25 @@ it('shows only the requested enrollment page and keeps whole-course totals', asy
   expect(paths).toContain('/api/courses/2/enrollments?page=1&page_size=20')
 })
 
+it('opens an active course certificate for revocation and refreshes its eligibility', async () => {
+  let revoked = false
+  vi.stubGlobal('fetch', vi.fn(async (path: string) => {
+    if (path === '/api/me') return json(me)
+    if (path === '/api/courses') return json(courses)
+    if (path.startsWith('/api/courses/1/enrollments?')) return json({ ...enrollments, summary: { completed: 1, incomplete: 1, active_certificates: revoked ? 0 : 1 }, items: [{ ...enrollments.items[0], active_certificate_id: revoked ? null : 11 }, enrollments.items[1]] })
+    if (path === '/api/certificates/11') return json({ id: 11, serial_number: 'CERT-E-011', learner_name: 'Alex Lee', course_title: 'Safety 101', issued_local_date: '2026-01-11', issued_local_datetime: '2026-01-11 00:30', status: revoked ? 'REVOKED' : 'ACTIVE' })
+    if (path === '/api/certificates/11/revoke') { revoked = true; return json({ operation_id: 8, certificate_id: 11, status: 'REVOKED', changed: true }) }
+    throw new Error(path)
+  }))
+  render(<ActorProvider><CoursesPage /></ActorProvider>)
+  fireEvent.click(await screen.findByRole('button', { name: '查看并撤销证书' }))
+  expect(await screen.findByText('CERT-E-011')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '撤销证书' }))
+  fireEvent.click(screen.getByRole('button', { name: '确认撤销' }))
+  expect(await screen.findByText('撤销成功')).toBeTruthy()
+  await waitFor(() => expect(screen.getByText('已有有效证书 0')).toBeTruthy())
+})
+
 it('retries an uncertain bulk issue with one key and shows every learner outcome', async () => {
   const keys: string[] = []
   vi.stubGlobal('fetch', vi.fn(async (path: string, options: RequestInit) => {
