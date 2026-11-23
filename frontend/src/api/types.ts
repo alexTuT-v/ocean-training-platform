@@ -1,0 +1,13 @@
+export type Tenant = { id: number; name: string; timezone: string }
+export type MeResponse = { admin: { id: number; email: string }; tenant: Tenant }
+export type Course = { id: number; title: string }
+export type CoursesResponse = { items: Course[] }
+export type Enrollment = { learner_id: number; learner_name: string; status: 'COMPLETED' | 'INCOMPLETE'; active_certificate_id: number | null }
+export type EnrollmentsResponse = { course: Course; items: Enrollment[] }
+export type CertificateStatus = 'ACTIVE' | 'REVOKED'
+export type CertificateSummary = { id: number; serial_number: string; learner_name: string; course_title: string; issued_local_date: string; status: CertificateStatus }
+export type CertificateListResponse = { items: CertificateSummary[]; page: number; page_size: number; total: number }
+export type CertificateDetail = CertificateSummary & { issued_local_datetime: string }
+export type BulkOutcome = { learner_id: number; learner_name: string; result: 'issued' | 'skipped' | 'failed'; reason: string | null; certificate_id: number | null; serial_number: string | null }
+export type BulkIssueResponse = { operation_id: number; status: 'COMPLETED'; summary: { issued: number; skipped: number; failed: number }; outcomes: BulkOutcome[] }
+export type RevokeResponse = { operation_id: number; certificate_id: number; status: 'REVOKED'; changed: boolean }
