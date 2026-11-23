@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { getJson } from '../api/client'
 import type { MeResponse, Tenant } from '../api/types'
 
-type ActorState = { actorEmail: string; tenant: Tenant | null; generation: number; loading: boolean; error: string | null; writeInFlight: boolean; setWriteInFlight: (busy: boolean) => void; switchActor: (email: string) => void; retry: () => void }
+type ActorState = { actorEmail: string; tenant: Tenant | null; generation: number; loading: boolean; error: string | null; writeInFlight: boolean; beginWrite: (key: string) => boolean; endWrite: (key: string) => void; switchActor: (email: string) => void; retry: () => void }
 const ActorContext = createContext<ActorState | null>(null)
 
 export function ActorProvider({ children }: { children: ReactNode }) {
@@ -12,6 +12,7 @@ export function ActorProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [writeInFlight, setWriteInFlight] = useState(false)
+  const activeWriteKeys = useRef(new Set<string>())
   const requestId = useRef(0)
 
   useEffect(() => {
@@ -31,7 +32,17 @@ export function ActorProvider({ children }: { children: ReactNode }) {
     if (!writeInFlight && email !== actorEmail) { setTenant(null); setLoading(true); setActorEmail(email); setGeneration(value => value + 1) }
   }, [actorEmail, writeInFlight])
   const retry = useCallback(() => setGeneration(value => value + 1), [])
-  return <ActorContext.Provider value={{ actorEmail, tenant, generation, loading, error, writeInFlight, setWriteInFlight, switchActor, retry }}>{children}</ActorContext.Provider>
+  const beginWrite = useCallback((key: string) => {
+    if (activeWriteKeys.current.has(key)) return false
+    activeWriteKeys.current.add(key)
+    setWriteInFlight(true)
+    return true
+  }, [])
+  const endWrite = useCallback((key: string) => {
+    activeWriteKeys.current.delete(key)
+    setWriteInFlight(activeWriteKeys.current.size > 0)
+  }, [])
+  return <ActorContext.Provider value={{ actorEmail, tenant, generation, loading, error, writeInFlight, beginWrite, endWrite, switchActor, retry }}>{children}</ActorContext.Provider>
 }
 
 export function useActor(): ActorState {

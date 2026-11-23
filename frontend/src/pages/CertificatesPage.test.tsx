@@ -3,8 +3,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { ActorProvider } from '../actor/ActorProvider'
 import { CertificatesPage } from './CertificatesPage'
+import { createPendingWrite, savePendingWrite } from '../lib/pendingWrite'
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+afterEach(() => { cleanup(); sessionStorage.clear(); vi.unstubAllGlobals() })
 const me = { admin: { id: 1, email: 'alice@east.test' }, tenant: { id: 1, name: 'East', timezone: 'Australia/Sydney' } }
 const item = { id: 11, serial_number: 'CERT-E-011', learner_name: 'Alex Lee', course_title: 'Safety 101', issued_local_date: '2026-01-11', status: 'ACTIVE' }
 const detail = { ...item, issued_local_datetime: '2026-01-11 00:30' }
@@ -77,4 +78,43 @@ it('returns focus to the revoke button after closing its confirmation', async ()
   fireEvent.keyDown(document, { key: 'Escape' })
   expect(screen.queryByRole('dialog')).toBeNull()
   expect(document.activeElement).toBe(revoke)
+})
+
+it.each([[true, '撤销成功'], [false, '证书已撤销，无需重复操作']] as const)('keeps the revoke outcome visible while detail refreshes (changed=%s)', async (changed, message) => {
+  let detailCalls = 0
+  let resolveRefresh!: (response: Response) => void
+  const refreshing = new Promise<Response>(resolve => { resolveRefresh = resolve })
+  vi.stubGlobal('fetch', vi.fn(async (path: string) => {
+    if (path === '/api/me') return json(me)
+    if (path === '/api/certificates/11') { detailCalls++; return detailCalls === 1 ? json(detail) : refreshing }
+    if (path === '/api/certificates/11/revoke') return json({ operation_id: 6, certificate_id: 11, status: 'REVOKED', changed })
+    return json({ items: [item], page: 1, page_size: 20, total: 1 })
+  }))
+  render(<MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><ActorProvider><CertificatesPage /></ActorProvider></MemoryRouter>)
+  fireEvent.click(await screen.findByRole('button', { name: 'CERT-E-011' }))
+  fireEvent.click(await screen.findByRole('button', { name: '撤销证书' }))
+  fireEvent.click(screen.getByRole('button', { name: '确认撤销' }))
+  await waitFor(() => expect(detailCalls).toBe(2))
+  expect(screen.getByText(message)).toBeTruthy()
+  resolveRefresh(json({ ...detail, status: 'REVOKED' }))
+  await waitFor(() => expect(screen.getByText(message)).toBeTruthy())
+  expect(screen.queryByRole('button', { name: '确认撤销' })).toBeNull()
+})
+
+it.each(['ACTIVE', 'REVOKED'] as const)('offers the saved revoke retry when a refreshed certificate is %s', async status => {
+  const pending = createPendingWrite('alice@east.test', '/api/certificates/11/revoke', {})
+  savePendingWrite(pending)
+  const keys: string[] = []
+  vi.stubGlobal('fetch', vi.fn(async (path: string, options: RequestInit) => {
+    if (path === '/api/me') return json(me)
+    if (path === '/api/certificates/11') return json({ ...detail, status })
+    if (path === '/api/certificates/11/revoke') { keys.push(new Headers(options.headers).get('Idempotency-Key') ?? ''); return json({ operation_id: 6, certificate_id: 11, status: 'REVOKED', changed: true }) }
+    return json({ items: [{ ...item, status }], page: 1, page_size: 20, total: 1 })
+  }))
+  render(<MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><ActorProvider><CertificatesPage /></ActorProvider></MemoryRouter>)
+  fireEvent.click(await screen.findByRole('button', { name: 'CERT-E-011' }))
+  fireEvent.click(await screen.findByRole('button', { name: '继续未决撤销操作' }))
+  fireEvent.click(screen.getByRole('button', { name: '确认撤销' }))
+  expect(await screen.findByText('撤销成功')).toBeTruthy()
+  expect(keys).toEqual([pending.key])
 })

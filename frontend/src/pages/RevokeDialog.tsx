@@ -3,9 +3,9 @@ import type { RevokeResponse } from '../api/types'
 import { createPendingWrite, loadPendingWrite, type PendingWrite } from '../lib/pendingWrite'
 import { submitWrite } from '../lib/writeRequest'
 
-type Props = { id: number; serial: string; actorEmail: string; onDone: () => void; onClose: () => void; onBusyChange?: (busy: boolean) => void }
+type Props = { id: number; serial: string; actorEmail: string; onDone: () => void; onClose: () => void; onBeginWrite?: (key: string) => boolean; onEndWrite?: (key: string) => void }
 
-export function RevokeDialog({ id, serial, actorEmail, onDone, onClose, onBusyChange }: Props) {
+export function RevokeDialog({ id, serial, actorEmail, onDone, onClose, onBeginWrite, onEndWrite }: Props) {
   const path = `/api/certificates/${id}/revoke`
   const [write, setWrite] = useState<PendingWrite | null>(() => {
     return loadPendingWrite(actorEmail, path)
@@ -23,14 +23,15 @@ export function RevokeDialog({ id, serial, actorEmail, onDone, onClose, onBusyCh
 
   async function confirm() {
     const operation = write ?? createPendingWrite(actorEmail, path, {})
-    setWrite(operation); setBusy(true); onBusyChange?.(true); setError(null)
+    if (onBeginWrite && !onBeginWrite(operation.key)) { setError('该操作正在处理中'); return }
+    setWrite(operation); setBusy(true); setError(null)
     try {
       const response = await submitWrite<RevokeResponse>(operation)
       setResult(response)
       onDone()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '请求结果不确定，请用原操作重试')
-    } finally { setBusy(false); onBusyChange?.(false) }
+    } finally { setBusy(false); onEndWrite?.(operation.key) }
   }
 
   return <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true" aria-label="撤销证书确认">

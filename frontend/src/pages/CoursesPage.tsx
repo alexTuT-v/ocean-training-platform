@@ -7,7 +7,7 @@ import { submitWrite } from '../lib/writeRequest'
 import { BulkIssueResults } from './BulkIssueResults'
 
 export function CoursesPage() {
-  const { actorEmail, tenant, setWriteInFlight } = useActor()
+  const { actorEmail, tenant, beginWrite, endWrite, writeInFlight } = useActor()
   const [courses, setCourses] = useState<Course[]>([])
   const [courseError, setCourseError] = useState<string | null>(null)
   const [coursesLoading, setCoursesLoading] = useState(true)
@@ -67,18 +67,20 @@ export function CoursesPage() {
     if (selectedId === null) return
     const path = `/api/courses/${selectedId}/bulk-issue`
     const operation = write ?? loadPendingWrite(actorEmail, path) ?? createPendingWrite(actorEmail, path, {})
-    setWrite(operation); setBusy(true); setWriteInFlight(true); setWriteError(null)
+    if (!beginWrite(operation.key)) { setWriteError('该操作正在处理中'); return }
+    setWrite(operation); setBusy(true); setWriteError(null)
     try {
       const response = await submitWrite<BulkIssueResponse>(operation)
       setResult(response); closeConfirm(); setWrite(null)
       setEnrollmentsRevision(value => value + 1)
     } catch (cause) {
       setWriteError(cause instanceof Error ? cause.message : '请求结果不确定，请用原操作重试')
-    } finally { setBusy(false); setWriteInFlight(false) }
+    } finally { setBusy(false); endWrite(operation.key) }
   }
   const rows = enrollments?.items ?? []
   const completed = rows.filter(row => row.status === 'COMPLETED').length
   const certified = rows.filter(row => row.active_certificate_id !== null).length
+  const savedPending = selectedId === null ? null : loadPendingWrite(actorEmail, `/api/courses/${selectedId}/bulk-issue`)
   return <section>
     <div className="page-heading"><div><h1>课程完成情况</h1><p>{tenant?.name} · {tenant?.timezone}</p></div></div>
     {coursesLoading ? <p role="status">正在加载课程…</p> : courseError ? <div role="alert">{courseError} <button onClick={() => setCoursesRevision(value => value + 1)}>重试课程</button></div> : courses.length === 0 ? <p className="empty-state">暂无课程</p> : <>
@@ -86,10 +88,10 @@ export function CoursesPage() {
       {enrollmentsLoading ? <p role="status">正在加载学员…</p> : enrollmentsError ? <div role="alert">{enrollmentsError} <button onClick={() => setEnrollmentsRevision(value => value + 1)}>重试学员</button></div> : enrollments && <>
         <div className="course-summary"><span>已完成 {completed}</span><span>未完成 {rows.length - completed}</span><span>已有有效证书 {certified}</span></div>
         {rows.length === 0 ? <p className="empty-state">该课程暂无学员</p> : <div className="table-scroll"><table><thead><tr><th>学员</th><th>完成状态</th><th>颁发资格</th></tr></thead><tbody>{rows.map(row => <tr key={row.learner_id}><td>{row.learner_name}</td><td>{row.status === 'COMPLETED' ? '已完成' : '未完成'}</td><td>{row.status === 'INCOMPLETE' ? '不可颁发' : row.active_certificate_id !== null ? '已有有效证书' : '可颁发'}</td></tr>)}</tbody></table></div>}
-        <p className="muted">仅为已完成且当前无有效证书的学员颁发。</p><button ref={issueButtonRef} className="primary-button" type="button" disabled={busy} onClick={() => setConfirmOpen(true)}>批量颁发</button>
+        <p className="muted">仅为已完成且当前无有效证书的学员颁发。</p><button ref={issueButtonRef} className="primary-button" type="button" disabled={busy || writeInFlight} onClick={() => { setWrite(savedPending); setConfirmOpen(true) }}>{savedPending ? '继续未决批量颁发操作' : '批量颁发'}</button>
       </>}
       {confirmOpen && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true" aria-label="批量颁发确认"><h2>批量颁发</h2><p>将为 {courses.find(course => course.id === selectedId)?.title} 中所有符合条件的学员颁发证书。</p>
-        {writeError && <p role="alert">{writeError}</p>}<div className="modal-actions"><button type="button" disabled={busy} onClick={closeConfirm}>取消</button><button ref={confirmButtonRef} type="button" disabled={busy} onClick={issue}>{busy ? '处理中…' : writeError ? '用同一操作重试' : '确认批量颁发'}</button></div>
+        {writeError && <p role="alert">{writeError}</p>}<div className="modal-actions"><button type="button" disabled={busy} onClick={closeConfirm}>取消</button><button ref={confirmButtonRef} type="button" disabled={busy} onClick={issue}>{busy ? '处理中…' : writeError || savedPending ? '用同一操作重试' : '确认批量颁发'}</button></div>
       </div></div>}
       {result && <BulkIssueResults result={result} />}
     </>}
