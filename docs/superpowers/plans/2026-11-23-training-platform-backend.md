@@ -13,6 +13,7 @@
 ## Global Constraints
 
 - 项目根目录为 `/Users/inception/learning/ocean-training-platform`；不引入生产登录、云部署、消息队列或无关功能。
+- 执行 Task 7 前，工作分支必须包含现有前端实现（当前位于 `feat/frontend`）；若从仅有设计文档的 `main` 开工，先基于前端分支建后端工作分支，或待前端 PR 合并后再联调。
 - 业务 API 只从 `X-Actor-Email` 解析管理员；`tenant_id` 不作为客户端授权范围输入。Alice/East 与 Bob/West 的同名课程和学员必须隔离。
 - 所有 POST 必须有 `Idempotency-Key`，同键同请求重放原状态码与 JSON，跨路径或改请求体返回 409；GET 无业务副作用且每次重新查询。
 - 两个 POST 接受 `{}` 或空请求体，成功返回 200 JSON；JSON 字段、枚举、错误体、CSV 列名与设计文档 §5 完全一致。
