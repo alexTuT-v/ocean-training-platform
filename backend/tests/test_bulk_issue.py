@@ -14,11 +14,11 @@ def app_for(path):
     return importlib.import_module("backend.app.main").create_app(path)
 
 
-def issue(client, key, course_id=1):
+def issue(client, key, course_id=1, learner_ids=None):
     return client.post(
         f"/api/courses/{course_id}/bulk-issue",
         headers={**ALICE, "Idempotency-Key": key},
-        json={},
+        json={"learner_ids": [1, 2, 3] if learner_ids is None else learner_ids},
     )
 
 
@@ -108,7 +108,7 @@ def test_row_failure_rolls_back_only_that_learner(seeded_db):
             f"WHEN NEW.learner_id = {alex_id} BEGIN SELECT RAISE(ABORT, 'blocked learner'); END"
         )
     client = TestClient(app_for(seeded_db))
-    response = issue(client, "row-failure")
+    response = issue(client, "row-failure", learner_ids=[1, 2, 3, dana_id])
     assert response.status_code == 200
     assert response.json()["summary"] == {"issued": 1, "skipped": 2, "failed": 1}
     outcomes = {row["learner_name"]: row for row in response.json()["outcomes"]}

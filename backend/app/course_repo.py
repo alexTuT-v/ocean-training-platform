@@ -14,18 +14,22 @@ def get_course(conn: sqlite3.Connection, tenant_id: int, course_id: int) -> dict
     return dict(row) if row else None
 
 
-def list_enrollments(conn: sqlite3.Connection, tenant_id: int, course_id: int) -> list[dict]:
-    rows = conn.execute(
-        "SELECT learners.id AS learner_id, learners.name AS learner_name, enrollments.status, "
-        "certificates.id AS active_certificate_id "
-        "FROM enrollments JOIN learners ON learners.id = enrollments.learner_id AND learners.tenant_id = enrollments.tenant_id "
-        "LEFT JOIN certificates ON certificates.tenant_id = enrollments.tenant_id "
-        "AND certificates.course_id = enrollments.course_id AND certificates.learner_id = enrollments.learner_id "
-        "AND certificates.status = 'ACTIVE' "
-        "WHERE enrollments.tenant_id = ? AND enrollments.course_id = ? ORDER BY learners.id",
-        (tenant_id, course_id),
-    )
-    return [dict(row) for row in rows]
+def list_enrollments(conn: sqlite3.Connection, tenant_id: int, course_id: int, learner_ids: list[int]) -> list[dict]:
+    rows = []
+    for start in range(0, len(learner_ids), 500):
+        chunk = learner_ids[start:start + 500]
+        placeholders = ",".join("?" for _ in chunk)
+        rows.extend(conn.execute(
+            "SELECT learners.id AS learner_id, learners.name AS learner_name, enrollments.status, "
+            "certificates.id AS active_certificate_id "
+            "FROM enrollments JOIN learners ON learners.id = enrollments.learner_id AND learners.tenant_id = enrollments.tenant_id "
+            "LEFT JOIN certificates ON certificates.tenant_id = enrollments.tenant_id "
+            "AND certificates.course_id = enrollments.course_id AND certificates.learner_id = enrollments.learner_id "
+            "AND certificates.status = 'ACTIVE' "
+            f"WHERE enrollments.tenant_id = ? AND enrollments.course_id = ? AND learners.id IN ({placeholders})",
+            (tenant_id, course_id, *chunk),
+        ))
+    return [dict(row) for row in sorted(rows, key=lambda row: row["learner_id"])]
 
 
 def page_enrollments(conn: sqlite3.Connection, tenant_id: int, course_id: int, page: int, page_size: int) -> dict:
