@@ -31,7 +31,7 @@ it('keeps list filters in the URL and displays the server local date in detail',
   await waitFor(() => expect(paths.some(path => path.includes('sort=learner_name'))).toBe(true))
   fireEvent.click(screen.getByRole('button', { name: '下一页' }))
   await waitFor(() => expect(paths.some(path => path.includes('page=2'))).toBe(true))
-  fireEvent.click(screen.getByRole('button', { name: /CERT-E-011/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'CERT-E-011' }))
   expect(await screen.findByText('2026-01-11 00:30')).toBeTruthy()
 })
 
@@ -78,6 +78,29 @@ it('returns focus to the revoke button after closing its confirmation', async ()
   fireEvent.keyDown(document, { key: 'Escape' })
   expect(screen.queryByRole('dialog')).toBeNull()
   expect(document.activeElement).toBe(revoke)
+})
+
+it('offers revocation directly from an active certificate row', async () => {
+  let revoked = false
+  const writes: string[] = []
+  vi.stubGlobal('fetch', vi.fn(async (path: string, options: RequestInit) => {
+    if (path === '/api/me') return json(me)
+    if (path === '/api/certificates/11/revoke') {
+      writes.push(new Headers(options.headers).get('Idempotency-Key') ?? '')
+      revoked = true
+      return json({ operation_id: 7, certificate_id: 11, status: 'REVOKED', changed: true })
+    }
+    return json({ items: [{ ...item, status: revoked ? 'REVOKED' : 'ACTIVE' }], page: 1, page_size: 20, total: 1 })
+  }))
+  render(<MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><ActorProvider><CertificatesPage /></ActorProvider></MemoryRouter>)
+  expect(await screen.findByText('CERT-E-011')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '撤销证书 CERT-E-011' }))
+  expect(screen.getByRole('dialog', { name: '撤销证书确认' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '确认撤销' }))
+  expect(await screen.findByText('撤销成功')).toBeTruthy()
+  expect(writes).toHaveLength(1)
+  expect(writes[0]).not.toBe('')
+  await waitFor(() => expect(screen.getByText('已撤销')).toBeTruthy())
 })
 
 it.each([[true, '撤销成功'], [false, '证书已撤销，无需重复操作']] as const)('keeps the revoke outcome visible while detail refreshes (changed=%s)', async (changed, message) => {

@@ -1,21 +1,23 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getJson } from '../api/client'
-import type { CertificateListResponse } from '../api/types'
+import type { CertificateListResponse, CertificateSummary } from '../api/types'
 import { useActor } from '../actor/ActorProvider'
 import { CertificateDrawer } from './CertificateDrawer'
+import { RevokeDialog } from './RevokeDialog'
 import { exportCertificates } from '../features/certificates/exportCsv'
 
 const sortOptions = ['issued_local_date', 'learner_name', 'course_title', 'serial_number'] as const
 type Sort = typeof sortOptions[number]
 
 export function CertificatesPage() {
-  const { actorEmail, tenant } = useActor()
+  const { actorEmail, tenant, beginWrite, endWrite, writeInFlight } = useActor()
   const [params, setParams] = useSearchParams()
   const [data, setData] = useState<CertificateListResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [revokeTarget, setRevokeTarget] = useState<CertificateSummary | null>(null)
   const [revision, setRevision] = useState(0)
   const [exportBusy, setExportBusy] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
@@ -24,6 +26,8 @@ export function CertificatesPage() {
   const sort: Sort = sortOptions.includes(candidate as Sort) ? candidate as Sort : 'issued_local_date'
   const direction = params.get('direction') === 'asc' ? 'asc' : 'desc'
   const page = Math.max(1, Number(params.get('page')) || 1)
+
+  useEffect(() => { setRevokeTarget(null) }, [actorEmail])
 
   useEffect(() => {
     if (!tenant) { setData(null); return }
@@ -62,11 +66,12 @@ export function CertificatesPage() {
     {loading && <p role="status">正在加载证书…</p>}
     {!loading && error && <div role="alert">{error} <button type="button" onClick={() => setRevision(value => value + 1)}>重试列表</button></div>}
     {!loading && !error && data && (data.items.length === 0 ? <p className="empty-state">{search ? '没有匹配的证书' : '暂无证书'}</p> : <>
-      <div className="table-scroll"><table><thead><tr><th>序列号</th><th>学员</th><th>课程</th><th>签发日期</th><th>状态</th></tr></thead><tbody>{data.items.map(item => <tr key={item.id}>
-        <td><button type="button" className="text-button" onClick={() => setSelectedId(item.id)}>{item.serial_number}</button></td><td>{item.learner_name}</td><td>{item.course_title}</td><td>{item.issued_local_date}</td><td><span className={`status ${item.status.toLowerCase()}`}>{item.status === 'ACTIVE' ? '有效' : '已撤销'}</span></td>
+      <div className="table-scroll"><table><thead><tr><th>序列号</th><th>学员</th><th>课程</th><th>签发日期</th><th>状态</th><th>操作</th></tr></thead><tbody>{data.items.map(item => <tr key={item.id}>
+        <td><button type="button" className="text-button" onClick={() => setSelectedId(item.id)}>{item.serial_number}</button></td><td>{item.learner_name}</td><td>{item.course_title}</td><td>{item.issued_local_date}</td><td><span className={`status ${item.status.toLowerCase()}`}>{item.status === 'ACTIVE' ? '有效' : '已撤销'}</span></td><td>{item.status === 'ACTIVE' && <button type="button" aria-label={`撤销证书 ${item.serial_number}`} disabled={writeInFlight} onClick={() => setRevokeTarget(item)}>撤销</button>}</td>
       </tr>)}</tbody></table></div>
       <div className="pagination"><span>共 {data.total} 条 · 第 {page} 页</span><button type="button" disabled={page <= 1} onClick={() => updateParam('page', String(page - 1))}>上一页</button><button type="button" disabled={page * 20 >= data.total} onClick={() => updateParam('page', String(page + 1))}>下一页</button></div>
     </>)}
     {selectedId !== null && <CertificateDrawer id={selectedId} actorEmail={actorEmail} onClose={() => setSelectedId(null)} onChanged={() => setRevision(value => value + 1)} />}
+    {revokeTarget && <RevokeDialog id={revokeTarget.id} serial={revokeTarget.serial_number} actorEmail={actorEmail} onBeginWrite={beginWrite} onEndWrite={endWrite} onClose={() => setRevokeTarget(null)} onDone={() => setRevision(value => value + 1)} />}
   </section>
 }

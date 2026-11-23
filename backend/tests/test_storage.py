@@ -1,12 +1,51 @@
 from datetime import datetime, timezone
 import importlib
 import sqlite3
+from zoneinfo import ZoneInfo
 
 import pytest
 
 
+def assert_seeded_times_are_current(path, before, after, expected_count):
+    db, _ = storage()
+    with db.connect(path) as conn:
+        rows = conn.execute(
+            "SELECT c.issued_at_utc, c.issued_local_date, t.timezone, "
+            "e.completed_at_utc, a.occurred_at_utc "
+            "FROM certificates c "
+            "JOIN tenants t ON t.id = c.tenant_id "
+            "JOIN enrollments e ON e.tenant_id = c.tenant_id AND e.course_id = c.course_id AND e.learner_id = c.learner_id "
+            "JOIN audit_events a ON a.tenant_id = c.tenant_id AND a.certificate_id = c.id AND a.event_type = 'ISSUED'"
+        ).fetchall()
+    assert len(rows) == expected_count
+    assert len({row[0] for row in rows}) == 1
+    for issued_text, local_date, zone, completed_text, audited_text in rows:
+        issued = datetime.fromisoformat(issued_text.replace("Z", "+00:00"))
+        assert before <= issued <= after
+        assert local_date == issued.astimezone(ZoneInfo(zone)).date().isoformat()
+        assert completed_text == audited_text == issued_text
+
+
 def storage():
     return importlib.import_module("backend.app.db"), importlib.import_module("backend.app.seed")
+
+
+def test_demo_seed_uses_current_time_consistently(tmp_path):
+    _, seed = storage()
+    path = tmp_path / "demo.sqlite3"
+    before = datetime.now(timezone.utc).replace(microsecond=0)
+    seed.seed_demo_data(path)
+    after = datetime.now(timezone.utc)
+    assert_seeded_times_are_current(path, before, after, 2)
+
+
+def test_performance_seed_uses_current_time_consistently(tmp_path):
+    performance = importlib.import_module("backend.scripts.seed_performance")
+    path = tmp_path / "performance.sqlite3"
+    before = datetime.now(timezone.utc).replace(microsecond=0)
+    performance.seed_performance(path, tenant="East", count=3)
+    after = datetime.now(timezone.utc)
+    assert_seeded_times_are_current(path, before, after, 3)
 
 
 def test_schema_rejects_cross_tenant_links_and_duplicate_active_certificate(tmp_path):

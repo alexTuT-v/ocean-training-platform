@@ -9,5 +9,9 @@ def to_local(issued_at_utc: datetime, tenant_timezone: str) -> tuple[str, str]:
     return local.strftime("%Y-%m-%d"), local.strftime("%Y-%m-%d %H:%M")
 
 
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def utc_now_text() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return utc_now().isoformat(timespec="seconds").replace("+00:00", "Z")
