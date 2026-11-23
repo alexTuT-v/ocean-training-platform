@@ -1,24 +1,26 @@
 # Frontend
 
-React + TypeScript + Vite implementation of the approved certificate admin UI.
+React + TypeScript + Vite certificate administration UI.
 
-## Local development
+## Complete app
 
-```bash
-npm install
-npm run dev
-```
+From the project root, run `./run.sh`. It installs declared dependencies, initializes demo data, builds `frontend/dist` and serves the UI and `/api` from FastAPI at `http://127.0.0.1:8000`.
 
-Vite proxies `/api` to `http://127.0.0.1:8000`. Start the backend separately for local development. The actor menu sends `X-Actor-Email` with either `alice@east.test` or `bob@west.test`; this is an assessment demo identity, not production authentication.
-
-## Verification and build
+## Frontend development
 
 ```bash
-npm test
-npm run typecheck
-npm run build
+npm --prefix frontend ci
+npm --prefix frontend run dev
 ```
 
-The production build is emitted to `frontend/dist`. The root one-command startup should install declared dependencies, initialize demo data, run `npm --prefix frontend run build`, and serve `frontend/dist` plus `/api` from FastAPI, with an SPA fallback for `/certificates` and `/courses`.
+Vite proxies `/api` to `http://127.0.0.1:8000`, so run the backend separately during Vite development. The actor menu sends `X-Actor-Email` for `alice@east.test` or `bob@west.test`. This is demo identity, not production authentication.
 
-The UI expects the JSON response shapes listed in `docs/superpowers/plans/2026-11-23-training-platform-frontend.md` at the project root. The backend is not part of this frontend implementation; end-to-end behavior requires that backend contract and the root startup script.
+## Verification
+
+```bash
+npm --prefix frontend test
+npm --prefix frontend run typecheck
+npm --prefix frontend run build
+```
+
+The production build is in `frontend/dist`. The frontend's JSON response shapes are locked to `backend/app/contracts.py` and the backend design document.

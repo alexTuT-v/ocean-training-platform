@@ -13,7 +13,7 @@ it('keeps a bulk write locked across route navigation until its POST finishes', 
   vi.stubGlobal('fetch', vi.fn(async (path: string) => {
     if (path === '/api/me') return json({ admin: { id: 1, email: 'alice@east.test' }, tenant: { id: 1, name: 'East', timezone: 'Australia/Sydney' } })
     if (path === '/api/courses') return json({ items: [{ id: 1, title: 'Safety 101' }] })
-    if (path === '/api/courses/1/enrollments') return json({ course: { id: 1, title: 'Safety 101' }, items: [{ learner_id: 1, learner_name: 'Alex Lee', status: 'COMPLETED', active_certificate_id: null }] })
+    if (path.startsWith('/api/courses/1/enrollments?')) return json({ course: { id: 1, title: 'Safety 101' }, page: 1, page_size: 20, total: 1, summary: { completed: 1, incomplete: 0, active_certificates: 0 }, items: [{ learner_id: 1, learner_name: 'Alex Lee', status: 'COMPLETED', active_certificate_id: null }] })
     if (path === '/api/courses/1/bulk-issue') { postCalls++; return post }
     if (path.startsWith('/api/certificates?')) return json({ items: [], page: 1, page_size: 20, total: 0 })
     throw new Error(path)

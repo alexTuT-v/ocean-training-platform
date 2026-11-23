@@ -48,7 +48,7 @@
 
 课程、学员、选课、证书的租户字段在写入时交叉校验，并以复合外键或等效数据库约束阻止跨租户关联。`audit_events` 对每张证书的 `ISSUED` 至多一条、`REVOKED` 至多一条；业务层同时控制事件只伴随实际状态变化写入。撤销后旧证书仍保留，后续颁发生成新序列号和新证书记录。为列表和导出准备租户与本地日期排序索引、序列号索引；10 万行场景再以查询计划核对索引效果。
 
-## 5. API 草案
+## 5. API 契约
 
 所有业务 API 要求 `X-Actor-Email`。所有写 API 额外要求非空 `Idempotency-Key`，缺失或格式错误返回 422；读 API 不使用幂等键。返回 JSON；无权限或跨租户对象使用 404，参数错误 422，幂等键冲突 409，服务错误 500。错误体含稳定的错误代码和用户可读消息，不回显其他租户对象信息。读 API 每次使用新查询读取该查询开始时已提交的数据，不缓存上次响应；单次导出保持查询自身的一致视图，后续导出重新查询。
 
@@ -62,6 +62,22 @@
 | `POST /api/courses/{course_id}/bulk-issue` | 必填 `Idempotency-Key`；请求体为空 JSON 对象或省略；逐学员返回 `issued`、`skipped`、`failed` 及原因和操作状态；同键重试重放首次响应 |
 | `POST /api/certificates/{certificate_id}/revoke` | 必填 `Idempotency-Key`；首次撤销改变状态并记审计；同键重试重放首次响应；新键重复撤销返回已撤销状态而不重复记审计 |
 | `GET /api/certificates/export` | 使用与列表相同的 `search`、`sort`、`direction`，流式返回 CSV；不分页 |
+
+前端已按下列 JSON 形状实现；后端不得用框架默认的 `detail` 响应替代这些字段：
+
+| 接口 | 成功响应（字段名和层级固定） |
+| --- | --- |
+| `GET /api/me` | `{ "admin": { "id": 1, "email": "alice@east.test" }, "tenant": { "id": 1, "name": "East", "timezone": "Australia/Sydney" } }` |
+| `GET /api/courses` | `{ "items": [{ "id": 1, "title": "Safety 101" }] }` |
+| `GET /api/courses/{id}/enrollments` | `{ "course": { "id": 1, "title": "Safety 101" }, "items": [{ "learner_id": 1, "learner_name": "Alex Lee", "status": "COMPLETED", "active_certificate_id": null }] }`；`status` 仅为 `COMPLETED`/`INCOMPLETE`，有效证书 ID 可为 `null` |
+| `GET /api/certificates` | `{ "items": [{ "id": 1, "serial_number": "...", "learner_name": "Alex Lee", "course_title": "Safety 101", "issued_local_date": "2026-01-11", "status": "ACTIVE" }], "page": 1, "page_size": 20, "total": 1 }`；状态仅为 `ACTIVE`/`REVOKED` |
+| `GET /api/certificates/{id}` | 列表项的全部字段，另有 `issued_local_datetime`，格式为租户本地 `YYYY-MM-DD HH:mm` |
+| `POST /api/courses/{id}/bulk-issue` | `{ "operation_id": 1, "status": "COMPLETED", "summary": { "issued": 1, "skipped": 1, "failed": 0 }, "outcomes": [{ "learner_id": 1, "learner_name": "Alex Lee", "result": "issued", "reason": null, "certificate_id": 1, "serial_number": "..." }] }`；每名选课学员恰有一项；`result` 为 `issued`/`skipped`/`failed`，未适用的证书字段为 `null`，跳过和失败的 `reason` 为可直接展示的非空文字 |
+| `POST /api/certificates/{id}/revoke` | `{ "operation_id": 1, "certificate_id": 1, "status": "REVOKED", "changed": true }`；新键重复撤销时 `changed: false`，同键重试重放原值 |
+
+两个写接口在同步完成后返回 `200` 和上述 JSON；不返回空的 `204` 或需要轮询的 `202`。错误体固定为 `{ "code": "STABLE_CODE", "message": "可读说明" }`，包括 FastAPI 参数校验错误；业务对象不存在或跨租户均返回不泄露对象信息的 `404`。`Idempotency-Key` 接受 1–128 个可打印的非空白 ASCII 字符，按原值比较；缺失或格式不符返回 `422`。演示系统不清理已完成的幂等记录，保证同一会话页面刷新后的未决请求仍可重放。
+
+查询参数 `direction` 使用 `asc`/`desc`；`page` 从 1 开始，`page_size` 接受 20 且设 1–100 上限；空 `search` 表示不过滤。列表的 `items` 与 `total` 在同一只读快照中取得。GET 响应使用 `Cache-Control: no-store`，路由注册保证 `/api/certificates/export` 不被 `/{certificate_id}` 捕获。CSV 响应为 `text/csv; charset=utf-8`，列标题依次为 `learner_name,course_title,serial_number,issued_local_date`；后端不依赖前端提供的下载文件名。
 
 列表和导出均包含 `ACTIVE` 与 `REVOKED`，搜索范围一致。首版排序白名单为 `issued_local_date`、`learner_name`、`course_title`、`serial_number`；默认 `issued_local_date DESC`。每种排序都追加 `certificate.id ASC` 作为最终稳定次序。列表分页使用 `LIMIT/OFFSET`；`page_size` 设置上限，避免单次响应过大。CSV 列顺序固定为学员姓名、课程标题、序列号、租户本地签发日期，不额外导出状态（按评估要求）。
 

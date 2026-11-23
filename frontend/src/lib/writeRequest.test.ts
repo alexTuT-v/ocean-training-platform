@@ -24,6 +24,32 @@ it('retries an uncertain write with its original actor, path, body and key', asy
   expect(loadPendingWrite()).toBeNull()
 })
 
+it('retains the key when HTTP succeeds but the response body cannot be read', async () => {
+  const write = createPendingWrite('alice@east.test', '/api/certificates/11/revoke', {})
+  const keys: string[] = []
+  vi.stubGlobal('fetch', vi.fn(async (_path: string, options: RequestInit) => {
+    keys.push(new Headers(options.headers).get('Idempotency-Key') ?? '')
+    if (keys.length === 1) {
+      const stream = new ReadableStream({ start(controller) { controller.error(new Error('body interrupted')) } })
+      return new Response(stream, { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({ operation_id: 9, certificate_id: 11, status: 'REVOKED', changed: true }), { status: 200 })
+  }))
+  await expect(submitWrite(write)).rejects.toThrow()
+  expect(loadPendingWrite('alice@east.test', write.path)?.key).toBe(write.key)
+  const replay = await submitWrite(loadPendingWrite('alice@east.test', write.path)!)
+  expect(replay).toMatchObject({ operation_id: 9, changed: true })
+  expect(keys).toEqual([write.key, write.key])
+  expect(loadPendingWrite('alice@east.test', write.path)).toBeNull()
+})
+
+it('retains the key for a readable but invalid success body', async () => {
+  const write = createPendingWrite('alice@east.test', '/api/certificates/11/revoke', {})
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ operation_id: 9, status: 'REVOKED' }), { status: 200 })))
+  await expect(submitWrite(write)).rejects.toThrow('响应内容无效')
+  expect(loadPendingWrite('alice@east.test', write.path)?.key).toBe(write.key)
+})
+
 it('uses a new key for a new operation and keeps a conflicting write pending', async () => {
   const first = createPendingWrite('alice@east.test', '/api/courses/1/bulk-issue', {})
   const second = createPendingWrite('alice@east.test', '/api/courses/1/bulk-issue', {})
