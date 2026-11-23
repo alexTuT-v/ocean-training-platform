@@ -51,7 +51,9 @@ router = APIRouter(prefix="/api")
 
 
 @router.get("/me", response_model=MeResponse)
-def me(actor: ActorContext = Depends(get_actor)) -> dict:
+def me(request: Request, actor: ActorContext = Depends(get_actor)) -> dict:
+    if request.query_params:
+        raise ApiError(422, "INVALID_REQUEST", "不支持的查询参数")
     return {
         "admin": {"id": actor.admin_id, "email": actor.email},
         "tenant": {"id": actor.tenant_id, "name": actor.tenant_name, "timezone": actor.timezone},

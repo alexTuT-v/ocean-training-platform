@@ -52,12 +52,6 @@ def test_completed_incomplete_and_certified_outcomes(seeded_db):
 
 def test_same_key_sequential_and_parallel_bulk_issue(seeded_db):
     app = app_for(seeded_db)
-    client = TestClient(app)
-    first = issue(client, "repeat-bulk")
-    replay = issue(client, "repeat-bulk")
-    assert first.status_code == replay.status_code == 200
-    assert first.json() == replay.json()
-
     barrier = Barrier(3)
 
     def concurrent():
@@ -70,8 +64,11 @@ def test_same_key_sequential_and_parallel_bulk_issue(seeded_db):
         parallel = [future.result() for future in futures]
     assert [response.status_code for response in parallel] == [200, 200]
     assert parallel[0].json() == parallel[1].json()
-    assert parallel[0].json()["summary"] == {"issued": 0, "skipped": 3, "failed": 0}
-    assert count(seeded_db, "idempotency_records") == 2
+    assert parallel[0].json()["summary"] == {"issued": 1, "skipped": 2, "failed": 0}
+    replay = issue(TestClient(app), "parallel-bulk")
+    assert replay.status_code == 200
+    assert replay.json() == parallel[0].json()
+    assert count(seeded_db, "idempotency_records") == 1
     assert count(seeded_db, "certificates") == 3
     assert count(seeded_db, "audit_events", "event_type = 'ISSUED'") == 3
 

@@ -52,6 +52,7 @@ def test_export_100k_repeatable_with_live_list(tmp_path):
                 headers=ALICE,
             )
             second_seconds = monotonic() - start
+            print(f"A6 full downloads: first={first_seconds:.3f}s second={second_seconds:.3f}s")
             assert second_response.status_code == 200
             assert first_seconds < 60 and second_seconds < 60
             assert first_export == second_response.content
