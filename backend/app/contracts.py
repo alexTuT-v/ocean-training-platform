@@ -58,3 +58,10 @@ class CertificateListResponse(BaseModel):
 
 class CertificateDetail(CertificateSummary):
     issued_local_datetime: str
+
+
+class RevokeResponse(BaseModel):
+    operation_id: int
+    certificate_id: int
+    status: Literal["REVOKED"]
+    changed: bool
