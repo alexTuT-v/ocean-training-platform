@@ -67,3 +67,20 @@ def get_certificate(conn: sqlite3.Connection, tenant_id: int, certificate_id: in
         (tenant_id, certificate_id),
     ).fetchone()
     return dict(row) if row else None
+
+
+def create_certificate(
+    conn: sqlite3.Connection,
+    tenant_id: int,
+    course_id: int,
+    learner_id: int,
+    serial_number: str,
+    issued_at_utc: str,
+    issued_local_date: str,
+) -> int:
+    return conn.execute(
+        "INSERT INTO certificates "
+        "(tenant_id, course_id, learner_id, serial_number, issued_at_utc, issued_local_date, status) "
+        "VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')",
+        (tenant_id, course_id, learner_id, serial_number, issued_at_utc, issued_local_date),
+    ).lastrowid

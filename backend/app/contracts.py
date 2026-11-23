@@ -65,3 +65,25 @@ class RevokeResponse(BaseModel):
     certificate_id: int
     status: Literal["REVOKED"]
     changed: bool
+
+
+class BulkOutcome(BaseModel):
+    learner_id: int
+    learner_name: str
+    result: Literal["issued", "skipped", "failed"]
+    reason: str | None
+    certificate_id: int | None
+    serial_number: str | None
+
+
+class BulkSummary(BaseModel):
+    issued: int
+    skipped: int
+    failed: int
+
+
+class BulkIssueResponse(BaseModel):
+    operation_id: int
+    status: Literal["COMPLETED"]
+    summary: BulkSummary
+    outcomes: list[BulkOutcome]
