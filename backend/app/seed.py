@@ -1,13 +1,8 @@
-from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
 
-from .dates import to_local
+from .dates import to_local, utc_now
 from .db import connect, initialize_database
-
-
-SEED_INSTANT = datetime(2026, 1, 10, 13, 30, tzinfo=timezone.utc)
-SEED_INSTANT_TEXT = "2026-01-10T13:30:00Z"
 
 
 def _tenant(conn: sqlite3.Connection, name: str, timezone_name: str) -> int:
@@ -23,6 +18,8 @@ def _person_or_course(conn: sqlite3.Connection, table: str, tenant_id: int, colu
 
 
 def seed_demo_data(path: Path) -> None:
+    instant = utc_now().replace(microsecond=0)
+    instant_text = instant.isoformat().replace("+00:00", "Z")
     initialize_database(path)
     conn = connect(path)
     try:
@@ -43,20 +40,20 @@ def seed_demo_data(path: Path) -> None:
                     status = "INCOMPLETE" if index == 1 else "COMPLETED"
                     conn.execute(
                         "INSERT OR IGNORE INTO enrollments (tenant_id, course_id, learner_id, status, completed_at_utc) VALUES (?, ?, ?, ?, ?)",
-                        (tenant_id, course_id, learner_ids[name], status, SEED_INSTANT_TEXT if status == "COMPLETED" else None),
+                        (tenant_id, course_id, learner_ids[name], status, instant_text if status == "COMPLETED" else None),
                     )
-                local_date, _ = to_local(SEED_INSTANT, zone)
+                local_date, _ = to_local(instant, zone)
                 conn.execute(
                     "INSERT OR IGNORE INTO certificates (tenant_id, course_id, learner_id, serial_number, issued_at_utc, issued_local_date, status) "
                     "VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')",
-                    (tenant_id, course_id, learner_ids[certified_name], serial, SEED_INSTANT_TEXT, local_date),
+                    (tenant_id, course_id, learner_ids[certified_name], serial, instant_text, local_date),
                 )
                 certificate = conn.execute("SELECT id FROM certificates WHERE serial_number = ?", (serial,)).fetchone()
                 if certificate:
                     conn.execute(
                         "INSERT OR IGNORE INTO audit_events (tenant_id, certificate_id, actor_id, event_type, occurred_at_utc) "
                         "VALUES (?, ?, ?, 'ISSUED', ?)",
-                        (tenant_id, certificate[0], actor_id, SEED_INSTANT_TEXT),
+                        (tenant_id, certificate[0], actor_id, instant_text),
                     )
     finally:
         conn.close()

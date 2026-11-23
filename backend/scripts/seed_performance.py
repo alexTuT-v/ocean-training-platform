@@ -1,13 +1,10 @@
 import argparse
-from datetime import datetime, timezone
 from pathlib import Path
 
-from backend.app.dates import to_local
+from backend.app.dates import to_local, utc_now
 from backend.app.db import connect, initialize_database
 
 
-INSTANT = datetime(2026, 1, 10, 13, 30, tzinfo=timezone.utc)
-INSTANT_TEXT = "2026-01-10T13:30:00Z"
 TENANTS = {
     "East": ("Australia/Sydney", "alice@east.test", "E", 1_000_000),
     "West": ("Australia/Perth", "bob@west.test", "W", 2_000_000),
@@ -18,7 +15,9 @@ def seed_performance(path: Path, tenant: str = "East", count: int = 100_000) -> 
     if tenant not in TENANTS or count < 1:
         raise ValueError("tenant must be East or West and count must be positive")
     zone, admin_email, prefix, base_id = TENANTS[tenant]
-    local_date, _ = to_local(INSTANT, zone)
+    instant = utc_now().replace(microsecond=0)
+    instant_text = instant.isoformat().replace("+00:00", "Z")
+    local_date, _ = to_local(instant, zone)
     initialize_database(path)
     conn = connect(path)
     try:
@@ -44,13 +43,13 @@ def seed_performance(path: Path, tenant: str = "East", count: int = 100_000) -> 
                 conn.executemany(
                     "INSERT OR IGNORE INTO enrollments (tenant_id, course_id, learner_id, status, completed_at_utc) "
                     "VALUES (?, ?, ?, 'COMPLETED', ?)",
-                    ((tenant_id, course_id, base_id + i, INSTANT_TEXT) for i in indices),
+                    ((tenant_id, course_id, base_id + i, instant_text) for i in indices),
                 )
                 conn.executemany(
                     "INSERT OR IGNORE INTO certificates "
                     "(tenant_id, course_id, learner_id, serial_number, issued_at_utc, issued_local_date, status) "
                     "VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')",
-                    ((tenant_id, course_id, base_id + i, f"PERF-{prefix}-{i:06d}", INSTANT_TEXT, local_date) for i in indices),
+                    ((tenant_id, course_id, base_id + i, f"PERF-{prefix}-{i:06d}", instant_text, local_date) for i in indices),
                 )
             conn.execute(
                 "INSERT OR IGNORE INTO audit_events "

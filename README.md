@@ -12,6 +12,8 @@ Requires Python 3.11+ and Node.js/npm. From the repository root, run one command
 
 The script installs declared Python and frontend dependencies, builds the frontend, initializes the database and repeatable demo data, then starts `http://127.0.0.1:8000`. It reuses an existing `.venv`. If the shell's default Python is older, set `TRAINING_PYTHON=/path/to/python3.11-or-newer` for this same command. Set `TRAINING_DB_PATH=/path/to/database.sqlite3` to use an isolated database.
 
+New demo and performance seed rows use the UTC time at script execution; certificate local dates are calculated in the tenant's timezone. Seed scripts preserve existing rows on repeat runs, including their original timestamps. Use a fresh database path when you need newly generated rows with a new timestamp.
+
 The UI has two demo actors: Alice (`alice@east.test`, East, `Australia/Sydney`) and Bob (`bob@west.test`, West, `Australia/Perth`). API requests identify an actor with `X-Actor-Email`; the backend resolves the tenant on every request. This header can be impersonated and is not production authentication. No client-supplied tenant ID grants access.
 
 The course enrollment API uses server-side pagination: `GET /api/courses/{id}/enrollments?page=1&page_size=20` (default page size 20, maximum 100). Its response includes the current page of `items`, `page`, `page_size`, `total`, and whole-course `summary` counts for completed, incomplete, and actively certified learners. The course page requests only the visible page; bulk issue still processes the full course.
