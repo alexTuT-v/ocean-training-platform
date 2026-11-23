@@ -54,6 +54,6 @@ export function CertificatesPage() {
       </tr>)}</tbody></table></div>
       <div className="pagination"><span>共 {data.total} 条 · 第 {page} 页</span><button type="button" disabled={page <= 1} onClick={() => updateParam('page', String(page - 1))}>上一页</button><button type="button" disabled={page * 20 >= data.total} onClick={() => updateParam('page', String(page + 1))}>下一页</button></div>
     </>)}
-    {selectedId !== null && <CertificateDrawer id={selectedId} actorEmail={actorEmail} onClose={() => setSelectedId(null)} />}
+    {selectedId !== null && <CertificateDrawer id={selectedId} actorEmail={actorEmail} onClose={() => setSelectedId(null)} onChanged={() => setRevision(value => value + 1)} />}
   </section>
 }

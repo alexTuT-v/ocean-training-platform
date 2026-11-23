@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { getJson } from '../api/client'
 import type { MeResponse, Tenant } from '../api/types'
 
-type ActorState = { actorEmail: string; tenant: Tenant | null; generation: number; loading: boolean; error: string | null; switchActor: (email: string) => void; retry: () => void }
+type ActorState = { actorEmail: string; tenant: Tenant | null; generation: number; loading: boolean; error: string | null; writeInFlight: boolean; setWriteInFlight: (busy: boolean) => void; switchActor: (email: string) => void; retry: () => void }
 const ActorContext = createContext<ActorState | null>(null)
 
 export function ActorProvider({ children }: { children: ReactNode }) {
@@ -11,6 +11,7 @@ export function ActorProvider({ children }: { children: ReactNode }) {
   const [generation, setGeneration] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [writeInFlight, setWriteInFlight] = useState(false)
   const requestId = useRef(0)
 
   useEffect(() => {
@@ -27,10 +28,10 @@ export function ActorProvider({ children }: { children: ReactNode }) {
   }, [actorEmail, generation])
 
   const switchActor = useCallback((email: string) => {
-    if (email !== actorEmail) { setTenant(null); setLoading(true); setActorEmail(email); setGeneration(value => value + 1) }
-  }, [actorEmail])
+    if (!writeInFlight && email !== actorEmail) { setTenant(null); setLoading(true); setActorEmail(email); setGeneration(value => value + 1) }
+  }, [actorEmail, writeInFlight])
   const retry = useCallback(() => setGeneration(value => value + 1), [])
-  return <ActorContext.Provider value={{ actorEmail, tenant, generation, loading, error, switchActor, retry }}>{children}</ActorContext.Provider>
+  return <ActorContext.Provider value={{ actorEmail, tenant, generation, loading, error, writeInFlight, setWriteInFlight, switchActor, retry }}>{children}</ActorContext.Provider>
 }
 
 export function useActor(): ActorState {
