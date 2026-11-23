@@ -35,9 +35,19 @@ class Enrollment(BaseModel):
     active_certificate_id: int | None
 
 
+class EnrollmentSummary(BaseModel):
+    completed: int
+    incomplete: int
+    active_certificates: int
+
+
 class EnrollmentsResponse(BaseModel):
     course: Course
     items: list[Enrollment]
+    page: int
+    page_size: int
+    total: int
+    summary: EnrollmentSummary
 
 
 class CertificateSummary(BaseModel):

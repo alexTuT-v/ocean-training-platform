@@ -62,3 +62,10 @@
 - 2026-11-23 自动验证：`.venv/bin/python -m compileall -q backend` 成功；最终 `.venv/bin/python -m pytest backend/tests -q -p no:cacheprovider` 为 `33 passed in 2.99s`；最终 `npm --prefix frontend test` 为 `25 passed`；`npm --prefix frontend run typecheck` 与 `npm --prefix frontend run build` 均成功。专项测试覆盖 A1–A7、读写契约、数据库约束、重试与跨租户边界。
 - Chrome 真实页面验收：Alice/East 与 Bob/West 切换后列表、详情和课程显示各自数据；Alice 经确认弹窗批量颁发后，结果逐学员显示 `issued/skipped` 与原因，证书列表新增记录；经确认撤销后，列表与详情均显示已撤销。搜索 `Casey`、排序 `serial_number` 后下载 `certificates-East.csv`，浏览器显示 179 B、完成；服务日志对应 `GET /api/certificates/export?search=Casey&sort=serial_number&direction=desc`，不含分页。浏览器没有模拟响应丢失、单行失败或在 100,000 行导出未完成时继续操作列表，也没有验证导出途中切换管理员，故页面三项整体仍未勾选；这些边界由前端组件测试和后端并发测试分别覆盖。
 - README 的命令和说明已人工核对，干净检出的 `./run.sh`、性能脚本与自动测试已实跑；A1–A7 的每条手工 `curl` 尚未逐条在该检出重演，因此 README 项保持未勾选。`ai/session-index.csv` 等 AI 会话材料不存在，Section 6 个人答案未核验；二者需提交者本人处理。最终 commit SHA 应在提交后记录，因此最后一项保持未勾选。
+
+## 7. 课程完成分页补充验收（2026-11-23）
+
+- [x] `GET /api/courses/{id}/enrollments` 默认每页 20，支持 `page/page_size`，每页最多 100；返回全课程 `total` 和完成、未完成、有效证书统计，拒绝无效分页及 `tenant_id`。（`test_enrollment_pages_limit_100k_rows_and_keep_course_totals`）
+- [x] 课程页只请求当前页，提供上一页、下一页，切换课程回到第一页，统计保持全课程口径。（`CoursesPage.test.tsx`；前端 26 项通过）
+- [x] 当前 East 10 万行性能课程实测：第 1、2 页各返回 20 条，`total=100000`，两页首个学员 ID 不同；第 5001 页返回空数组。接口实测耗时约 0.153 秒、0.091 秒、0.051 秒。
+- [ ] 真实浏览器在 10 万行课程上点击下一页并观察页面渲染；本次浏览器检查因 Chrome 被用户操作打断，尚无该项证据。

@@ -63,3 +63,30 @@ def test_unknown_actor_and_cross_tenant_course(seeded_db):
     assert cross_tenant.status_code == 404
     assert set(cross_tenant.json()) == {"code", "message"}
     assert client.get("/api/courses?tenant_id=1", headers=BOB).status_code == 422
+
+
+def test_enrollment_pages_limit_100k_rows_and_keep_course_totals(tmp_path):
+    from backend.scripts.seed_performance import seed_performance
+
+    db_path = tmp_path / "large-course.sqlite3"
+    seed_performance(db_path, tenant="East", count=100_000)
+    seed_performance(db_path, tenant="West", count=1)
+    client = client_for(db_path)
+    course_id = client.get("/api/courses", headers=ALICE).json()["items"][0]["id"]
+    url = f"/api/courses/{course_id}/enrollments"
+    first = client.get(url, headers=ALICE)
+    assert first.status_code == 200
+    assert first.json()["page"] == 1
+    assert first.json()["page_size"] == 20
+    assert first.json()["total"] == 100_000
+    assert first.json()["summary"] == {"completed": 100_000, "incomplete": 0, "active_certificates": 100_000}
+    assert len(first.json()["items"]) == 20
+    second = client.get(url, params={"page": 2, "page_size": 20}, headers=ALICE)
+    assert second.status_code == 200
+    assert len(second.json()["items"]) == 20
+    assert first.json()["items"][-1]["learner_id"] < second.json()["items"][0]["learner_id"]
+    assert second.json()["summary"] == first.json()["summary"]
+    assert client.get(url, params={"page": 5001, "page_size": 20}, headers=ALICE).json()["items"] == []
+    assert client.get(url, params={"page_size": 101}, headers=ALICE).status_code == 422
+    assert client.get(url, params={"tenant_id": 1}, headers=ALICE).status_code == 422
+    assert client.get(url, headers=BOB).status_code == 404

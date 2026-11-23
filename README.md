@@ -14,6 +14,8 @@ The script installs declared Python and frontend dependencies, builds the fronte
 
 The UI has two demo actors: Alice (`alice@east.test`, East, `Australia/Sydney`) and Bob (`bob@west.test`, West, `Australia/Perth`). API requests identify an actor with `X-Actor-Email`; the backend resolves the tenant on every request. This header can be impersonated and is not production authentication. No client-supplied tenant ID grants access.
 
+The course enrollment API uses server-side pagination: `GET /api/courses/{id}/enrollments?page=1&page_size=20` (default page size 20, maximum 100). Its response includes the current page of `items`, `page`, `page_size`, `total`, and whole-course `summary` counts for completed, incomplete, and actively certified learners. The course page requests only the visible page; bulk issue still processes the full course.
+
 ## Verify
 
 ```bash

@@ -17,7 +17,8 @@ def test_all_json_shapes_match_frontend_contract(seeded_db):
     assert set(courses) == {"items"}
     assert set(courses["items"][0]) == {"id", "title"}
     enrollments = client.get("/api/courses/1/enrollments", headers=ALICE).json()
-    assert set(enrollments) == {"course", "items"}
+    assert set(enrollments) == {"course", "items", "page", "page_size", "total", "summary"}
+    assert enrollments["summary"] == {"completed": 2, "incomplete": 1, "active_certificates": 1}
     assert set(enrollments["items"][0]) == {"learner_id", "learner_name", "status", "active_certificate_id"}
 
     listed = client.get("/api/certificates", headers=ALICE).json()

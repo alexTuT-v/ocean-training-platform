@@ -6,7 +6,7 @@ from uuid import uuid4
 from .actor import ActorContext
 from .audit_repo import record_event
 from .certificate_repo import create_certificate
-from .course_repo import get_course, list_courses, list_enrollments
+from .course_repo import get_course, list_courses, list_enrollments, page_enrollments
 from .dates import to_local
 from .db import connect
 from .errors import ApiError
@@ -17,11 +17,11 @@ def courses_for_actor(conn: sqlite3.Connection, actor: ActorContext) -> dict:
     return {"items": list_courses(conn, actor.tenant_id)}
 
 
-def enrollments_for_course(conn: sqlite3.Connection, actor: ActorContext, course_id: int) -> dict:
+def enrollments_for_course(conn: sqlite3.Connection, actor: ActorContext, course_id: int, page: int, page_size: int) -> dict:
     course = get_course(conn, actor.tenant_id, course_id)
     if course is None:
         raise ApiError(404, "NOT_FOUND", "资源不存在")
-    return {"course": course, "items": list_enrollments(conn, actor.tenant_id, course_id)}
+    return {"course": course, **page_enrollments(conn, actor.tenant_id, course_id, page, page_size)}
 
 
 def bulk_issue_course(path: Path, actor: ActorContext, course_id: int, key: str, body: dict) -> tuple[int, dict]:
