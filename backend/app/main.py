@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 
 from .actor import router as actor_router
 from .course_routes import router as course_router
+from .certificate_routes import router as certificate_router
 from .errors import install_error_handlers
 
 
@@ -15,6 +16,7 @@ def create_app(db_path: Path, frontend_dist: Path | None = None) -> FastAPI:
     install_error_handlers(app)
     app.include_router(actor_router)
     app.include_router(course_router)
+    app.include_router(certificate_router)
 
     @app.middleware("http")
     async def no_store_api(request: Request, call_next):

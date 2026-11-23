@@ -38,3 +38,23 @@ class Enrollment(BaseModel):
 class EnrollmentsResponse(BaseModel):
     course: Course
     items: list[Enrollment]
+
+
+class CertificateSummary(BaseModel):
+    id: int
+    serial_number: str
+    learner_name: str
+    course_title: str
+    issued_local_date: str
+    status: Literal["ACTIVE", "REVOKED"]
+
+
+class CertificateListResponse(BaseModel):
+    items: list[CertificateSummary]
+    page: int
+    page_size: int
+    total: int
+
+
+class CertificateDetail(CertificateSummary):
+    issued_local_datetime: str
