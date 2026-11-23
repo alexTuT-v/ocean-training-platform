@@ -18,7 +18,7 @@ def test_end_to_end_actor_issue_revoke_export(seeded_db):
     eligible = client.get("/api/courses/1/enrollments", headers=ALICE).json()["items"]
     assert {row["learner_name"]: row["active_certificate_id"] for row in eligible}["Alex Lee"] is None
 
-    issued = client.post("/api/courses/1/bulk-issue", headers={**ALICE, "Idempotency-Key": "e2e-issue"}, json={})
+    issued = client.post("/api/courses/1/bulk-issue", headers={**ALICE, "Idempotency-Key": "e2e-issue"}, json={"learner_ids": [1, 2, 3]})
     assert issued.status_code == 200
     assert issued.json()["summary"] == {"issued": 1, "skipped": 2, "failed": 0}
     alex = next(row for row in issued.json()["outcomes"] if row["learner_name"] == "Alex Lee")
@@ -44,7 +44,7 @@ def test_end_to_end_actor_issue_revoke_export(seeded_db):
     assert client.get("/api/me", headers=BOB).json()["tenant"]["name"] == "West"
     assert [row["serial_number"] for row in client.get("/api/certificates", headers=BOB).json()["items"]] == ["WEST-SEED-001"]
     assert "EAST" not in client.get("/api/certificates/export", headers=BOB).text
-    cross = client.post("/api/courses/1/bulk-issue", headers={**BOB, "Idempotency-Key": "e2e-cross"}, json={})
+    cross = client.post("/api/courses/1/bulk-issue", headers={**BOB, "Idempotency-Key": "e2e-cross"}, json={"learner_ids": [1]})
     assert cross.status_code == 404
     with connect(seeded_db) as conn:
         assert conn.execute("SELECT COUNT(*) FROM idempotency_records").fetchone()[0] == 2
@@ -74,7 +74,7 @@ def test_bulk_issue_rejects_invalid_write_requests_without_side_effects(seeded_d
             conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             for table in ("certificates", "audit_events", "idempotency_records")
         )
-    for key, body in ((None, {}), (" ", {}), ("x" * 129, {}), ("invalid-body", [])):
+    for key, body in ((None, {"learner_ids": [1]}), (" ", {"learner_ids": [1]}), ("x" * 129, {"learner_ids": [1]}), ("invalid-body", []), ("empty-selection", {})):
         headers = {**ALICE, **({"Idempotency-Key": key} if key is not None else {})}
         response = client.post("/api/courses/1/bulk-issue", headers=headers, json=body)
         assert response.status_code == 422

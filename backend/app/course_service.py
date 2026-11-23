@@ -28,16 +28,24 @@ def bulk_issue_course(path: Path, actor: ActorContext, course_id: int, key: str,
     conn = connect(path)
     try:
         request_fingerprint = fingerprint("POST", "/api/courses/{course_id}/bulk-issue", course_id, body)
+        selected_enrollments: list[dict] = []
 
         def validate_new_request() -> None:
-            if body:
-                raise ApiError(422, "INVALID_REQUEST", "请求体不支持额外字段")
+            nonlocal selected_enrollments
+            if set(body) != {"learner_ids"} or not isinstance(body["learner_ids"], list) or not body["learner_ids"]:
+                raise ApiError(422, "INVALID_REQUEST", "请选择至少一名学员")
+            learner_ids = body["learner_ids"]
+            if any(type(learner_id) is not int or not 1 <= learner_id <= 2**63 - 1 for learner_id in learner_ids) or len(set(learner_ids)) != len(learner_ids):
+                raise ApiError(422, "INVALID_REQUEST", "学员 ID 无效或重复")
             if get_course(conn, actor.tenant_id, course_id) is None:
                 raise ApiError(404, "NOT_FOUND", "资源不存在")
+            selected_enrollments = list_enrollments(conn, actor.tenant_id, course_id, learner_ids)
+            if len(selected_enrollments) != len(learner_ids):
+                raise ApiError(422, "INVALID_REQUEST", "所选学员不属于当前课程")
 
         def perform(record_id: int) -> tuple[int, dict]:
             outcomes = []
-            for enrollment in list_enrollments(conn, actor.tenant_id, course_id):
+            for enrollment in selected_enrollments:
                 common = {
                     "learner_id": enrollment["learner_id"],
                     "learner_name": enrollment["learner_name"],

@@ -28,7 +28,7 @@ def test_all_json_shapes_match_frontend_contract(seeded_db):
     detail = client.get(f"/api/certificates/{certificate['id']}", headers=ALICE).json()
     assert set(detail) == set(certificate) | {"issued_local_datetime"}
 
-    issued = client.post("/api/courses/1/bulk-issue", headers={**ALICE, "Idempotency-Key": "contract-bulk"}, json={})
+    issued = client.post("/api/courses/1/bulk-issue", headers={**ALICE, "Idempotency-Key": "contract-bulk"}, json={"learner_ids": [1, 2, 3]})
     assert issued.status_code == 200
     assert set(issued.json()) == {"operation_id", "status", "summary", "outcomes"}
     assert set(issued.json()["summary"]) == {"issued", "skipped", "failed"}
@@ -46,7 +46,7 @@ def test_get_after_committed_write_reads_new_state(seeded_db):
     before = client.get("/api/certificates", headers=ALICE)
     assert before.headers["cache-control"] == "no-store"
     assert before.json()["total"] == 1
-    assert client.post("/api/courses/1/bulk-issue", headers={**ALICE, "Idempotency-Key": "fresh-bulk"}, json={}).status_code == 200
+    assert client.post("/api/courses/1/bulk-issue", headers={**ALICE, "Idempotency-Key": "fresh-bulk"}, json={"learner_ids": [1]}).status_code == 200
     after_issue = client.get("/api/certificates", headers=ALICE)
     assert after_issue.json()["total"] == 2
     certificate_id = after_issue.json()["items"][0]["id"]
