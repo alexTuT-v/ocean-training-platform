@@ -16,7 +16,9 @@ New demo and performance seed rows use the UTC time at script execution; certifi
 
 The UI has two demo actors: Alice (`alice@east.test`, East, `Australia/Sydney`) and Bob (`bob@west.test`, West, `Australia/Perth`). API requests identify an actor with `X-Actor-Email`; the backend resolves the tenant on every request. This header can be impersonated and is not production authentication. No client-supplied tenant ID grants access.
 
-The course enrollment API uses server-side pagination: `GET /api/courses/{id}/enrollments?page=1&page_size=20` (default page size 20, maximum 100). Its response includes the current page of `items`, `page`, `page_size`, `total`, and whole-course `summary` counts for completed, incomplete, and actively certified learners. The course page requests only the visible page; bulk issue still processes the full course.
+The course enrollment API uses server-side pagination: `GET /api/courses/{id}/enrollments?page=1&page_size=20` (default page size 20, maximum 100). Its response includes the current page of `items`, `page`, `page_size`, `total`, and whole-course `summary` counts for completed, incomplete, and actively certified learners. The course page requests only the visible page. Admins can select eligible learners across pages; **全选本页** selects eligible learners on the visible page only. The selected count is retained across pages.
+
+Bulk issue requires an explicit JSON body such as `{"learner_ids":[1,3]}`. An empty or omitted selection never issues to the whole course. Every ID must belong to the current tenant and course; a learner who becomes ineligible before execution receives a skipped outcome. Saved uncertain requests replay the original body and idempotency key.
 
 To revoke an active certificate, use **撤销** in its certificate-list row, or choose **查看并撤销证书** for a learner on the course completion page. Both paths show a confirmation dialog. The revoked certificate remains in the list, and the learner becomes eligible for a new certificate.
 
@@ -42,33 +44,33 @@ Set `BASE=http://127.0.0.1:8000` after starting the app. Commands below use `cur
 curl -sS -H 'X-Actor-Email: bob@west.test' "$BASE/api/certificates"
 curl -sS -H 'X-Actor-Email: bob@west.test' "$BASE/api/certificates/export"
 curl -i -H 'X-Actor-Email: bob@west.test' "$BASE/api/certificates/1"
-curl -i -X POST -H 'X-Actor-Email: bob@west.test' -H 'Idempotency-Key: a1-cross' -H 'Content-Type: application/json' -d '{}' "$BASE/api/courses/1/bulk-issue"
+curl -i -X POST -H 'X-Actor-Email: bob@west.test' -H 'Idempotency-Key: a1-cross' -H 'Content-Type: application/json' -d '{"learner_ids":[1]}' "$BASE/api/courses/1/bulk-issue"
 .venv/bin/python -m pytest backend/tests/test_actor_courses.py backend/tests/test_idempotency_revoke.py -q
 ```
 
 **A2 — retry safety.** Send the same operation key twice; `operation_id` and full result stay the same. The test also sends concurrent requests and checks certificates and ISSUED audit counts:
 
 ```bash
-curl -sS -X POST -H 'X-Actor-Email: alice@east.test' -H 'Idempotency-Key: a2-same' -H 'Content-Type: application/json' -d '{}' "$BASE/api/courses/1/bulk-issue"
-curl -sS -X POST -H 'X-Actor-Email: alice@east.test' -H 'Idempotency-Key: a2-same' -H 'Content-Type: application/json' -d '{}' "$BASE/api/courses/1/bulk-issue"
+curl -sS -X POST -H 'X-Actor-Email: alice@east.test' -H 'Idempotency-Key: a2-same' -H 'Content-Type: application/json' -d '{"learner_ids":[1,2,3]}' "$BASE/api/courses/1/bulk-issue"
+curl -sS -X POST -H 'X-Actor-Email: alice@east.test' -H 'Idempotency-Key: a2-same' -H 'Content-Type: application/json' -d '{"learner_ids":[1,2,3]}' "$BASE/api/courses/1/bulk-issue"
 .venv/bin/python -m pytest backend/tests/test_bulk_issue.py -q
 ```
 
 **A3 — key misuse.** After A2, reuse that key for a different course or payload. Both return 409 without changing the stored A2 result:
 
 ```bash
-curl -i -X POST -H 'X-Actor-Email: alice@east.test' -H 'Idempotency-Key: a2-same' -H 'Content-Type: application/json' -d '{}' "$BASE/api/courses/999/bulk-issue"
-curl -i -X POST -H 'X-Actor-Email: alice@east.test' -H 'Idempotency-Key: a2-same' -H 'Content-Type: application/json' -d '{"extra":1}' "$BASE/api/courses/1/bulk-issue"
+curl -i -X POST -H 'X-Actor-Email: alice@east.test' -H 'Idempotency-Key: a2-same' -H 'Content-Type: application/json' -d '{"learner_ids":[1,2,3]}' "$BASE/api/courses/999/bulk-issue"
+curl -i -X POST -H 'X-Actor-Email: alice@east.test' -H 'Idempotency-Key: a2-same' -H 'Content-Type: application/json' -d '{"learner_ids":[1]}' "$BASE/api/courses/1/bulk-issue"
 ```
 
-**A4 — learner outcomes.** On a fresh demo database, course `1` has eligible Alex, incomplete Beth, and already certified Casey. The response has one `issued` and two `skipped` outcomes with reasons:
+**A4 — learner outcomes.** On a fresh demo database, course `1` has eligible Alex, incomplete Beth, and already certified Casey. Explicitly selecting all three gives one `issued` and two `skipped` outcomes with reasons:
 
 ```bash
-curl -sS -X POST -H 'X-Actor-Email: alice@east.test' -H 'Idempotency-Key: a4-first' -H 'Content-Type: application/json' -d '{}' "$BASE/api/courses/1/bulk-issue"
+curl -sS -X POST -H 'X-Actor-Email: alice@east.test' -H 'Idempotency-Key: a4-first' -H 'Content-Type: application/json' -d '{"learner_ids":[1,2,3]}' "$BASE/api/courses/1/bulk-issue"
 .venv/bin/python -m pytest backend/tests/test_bulk_issue.py -q
 ```
 
-**A5 — tenant-local date.** The two seed certificates share `2026-01-10T13:30:00Z`; East detail displays `2026-01-11 00:30`, West displays `2026-01-10 21:30`. Compare list dates and CSV:
+**A5 — tenant-local date.** New seed certificates share the UTC time at seed execution; East and West details display that instant in their respective tenant timezones. Compare list dates and CSV. The automated test fixture uses a fixed instant to assert exact date conversion:
 
 ```bash
 curl -sS -H 'X-Actor-Email: alice@east.test' "$BASE/api/certificates/1"
